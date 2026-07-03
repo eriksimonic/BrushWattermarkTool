@@ -10,6 +10,8 @@ from brush_watermark.geometry.path_text import (
 )
 from brush_watermark.geometry.points import clamp, normalize_text_direction, path_length
 from brush_watermark.models import Settings, Stroke, TextSpan
+from brush_watermark.rendering.blend import composite_watermark_layer, normalize_blend_mode
+from brush_watermark.rendering.colors import parse_rgb
 from brush_watermark.rendering.fonts import (
     FONT_SIZE_RATIO,
     TEXT_SPAN_FILL,
@@ -136,8 +138,9 @@ def draw_text_on_path(
         points, stroke.brush_size, text, settings.font_name, settings.auto_fit_text
     )
     font = load_font(settings.font_name, font_size)
-    alpha = int(255 * clamp(stroke.opacity, 1, 100) / 100)
-    fill = (255, 255, 255, alpha) if settings.text_color == "white" else (0, 0, 0, alpha)
+    text_color = stroke.text_color
+    r, g, b = parse_rgb(text_color)
+    fill = (r, g, b, 255)
     glyphs = build_glyph_cache(text, font, fill)
     if not glyphs:
         return
@@ -150,7 +153,7 @@ def draw_text_on_path(
 
     x0, y0, _ = point_at_distance(points, start)
     x1, y1, _ = point_at_distance(points, start + used_span)
-    baseline_angle = math.atan2(y1 - y0, x1 - x0) + math.radians(settings.angle_offset)
+    baseline_angle = math.atan2(y1 - y0, x1 - x0) + math.radians(stroke.angle_offset)
 
     pos = start
     prev_angle = baseline_angle
@@ -172,6 +175,28 @@ def draw_text_on_path(
         pos += advance + gap_extra
 
 
+def make_stroke_watermark_layer(
+    width: int,
+    height: int,
+    stroke: Stroke,
+    settings: Settings,
+    erase_mask: Image.Image,
+    scale_factor: float = 1.0,
+) -> Image.Image:
+    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw_text_on_path(layer, stroke, settings)
+    stroke_mask = make_stroke_mask(
+        width, height, [stroke], stroke.mask_softness, stroke.brush_size
+    )
+    stroke_mask = apply_erase_mask(stroke_mask, erase_mask, stroke.mask_softness, scale_factor)
+    alpha_channel = layer.getchannel("A")
+    alpha_channel = Image.composite(
+        alpha_channel, Image.new("L", alpha_channel.size, 0), stroke_mask
+    )
+    layer.putalpha(alpha_channel)
+    return layer
+
+
 def make_watermark_layer(
     width: int,
     height: int,
@@ -182,25 +207,34 @@ def make_watermark_layer(
 ) -> Image.Image:
     layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     for stroke in strokes:
-        draw_text_on_path(layer, stroke, settings)
-    stroke_mask = make_stroke_mask(
-        width, height, strokes, settings.mask_softness, settings.brush_size
-    )
-    stroke_mask = apply_erase_mask(stroke_mask, erase_mask, settings.mask_softness, scale_factor)
-    alpha_channel = layer.getchannel("A")
-    alpha_channel = Image.composite(
-        alpha_channel, Image.new("L", alpha_channel.size, 0), stroke_mask
-    )
-    layer.putalpha(alpha_channel)
+        stroke_layer = make_stroke_watermark_layer(
+            width, height, stroke, settings, erase_mask, scale_factor
+        )
+        layer.alpha_composite(stroke_layer)
     return layer
 
 
-def composite_watermark(base: Image.Image, strokes: list[Stroke], settings: Settings, erase_mask: Image.Image) -> Image.Image:
-    watermark = make_watermark_layer(
-        base.size[0], base.size[1], strokes, settings, erase_mask, 1.0
-    )
+def composite_strokes_onto(base: Image.Image, strokes: list[Stroke], settings: Settings, erase_mask: Image.Image, scale_factor: float = 1.0) -> Image.Image:
     result = base.convert("RGBA")
-    result.alpha_composite(watermark)
+    for stroke in strokes:
+        if not stroke.visible:
+            continue
+        stroke_layer = make_stroke_watermark_layer(
+            result.size[0], result.size[1], stroke, settings, erase_mask, scale_factor
+        )
+        strength = clamp(stroke.opacity, 1, 100) / 100.0
+        result = composite_watermark_layer(
+            result,
+            stroke_layer,
+            stroke.text_color,
+            normalize_blend_mode(stroke.blend_mode, settings.blend_mode),
+            strength,
+        )
+    return result
+
+
+def composite_watermark(base: Image.Image, strokes: list[Stroke], settings: Settings, erase_mask: Image.Image) -> Image.Image:
+    result = composite_strokes_onto(base, strokes, settings, erase_mask, 1.0)
     return result.convert("RGB")
 
 
@@ -216,8 +250,6 @@ def make_preview_image(
     display_w = max(1, int(display_w))
     display_h = max(1, int(display_h))
     preview_base = original.resize((display_w, display_h), Image.Resampling.LANCZOS).convert("RGBA")
-    preview_watermark = make_watermark_layer(
-        display_w, display_h, strokes, settings, erase_mask, scale_factor
-    )
-    preview_base.alpha_composite(preview_watermark)
-    return preview_base.convert("RGBA")
+    return composite_strokes_onto(
+        preview_base, strokes, settings, erase_mask, scale_factor
+    ).convert("RGBA")

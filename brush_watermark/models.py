@@ -4,6 +4,10 @@ from typing import Optional
 from brush_watermark.geometry.points import Point
 
 
+DEFAULT_BLEND_MODE = "soft_light"
+DEFAULT_TEXT_COLOR = "#ffffff"
+
+
 @dataclass
 class Settings:
     watermark_text: str = "Erik Simonič"
@@ -12,11 +16,15 @@ class Settings:
     brush_size: int = 120
     angle_offset: int = 0
     mask_softness: int = 1
-    text_color: str = "white"
+    text_color: str = DEFAULT_TEXT_COLOR
     auto_fit_text: bool = True
+    blend_mode: str = DEFAULT_BLEND_MODE
 
     @classmethod
     def from_dict(cls, data: dict) -> "Settings":
+        from brush_watermark.rendering.blend import normalize_blend_mode
+        from brush_watermark.rendering.colors import normalize_text_color
+
         return cls(
             watermark_text=str(data.get("watermark_text", cls.watermark_text)),
             opacity=int(data.get("opacity", cls.opacity)),
@@ -24,8 +32,9 @@ class Settings:
             brush_size=int(data.get("brush_size", cls.brush_size)),
             angle_offset=int(data.get("angle_offset", cls.angle_offset)),
             mask_softness=int(data.get("mask_softness", cls.mask_softness)),
-            text_color=str(data.get("text_color", cls.text_color)),
+            text_color=normalize_text_color(data.get("text_color"), cls.text_color),
             auto_fit_text=bool(data.get("auto_fit_text", cls.auto_fit_text)),
+            blend_mode=normalize_blend_mode(data.get("blend_mode"), cls.blend_mode),
         )
 
     def to_dict(self) -> dict:
@@ -38,6 +47,7 @@ class Settings:
             "mask_softness": self.mask_softness,
             "text_color": self.text_color,
             "auto_fit_text": self.auto_fit_text,
+            "blend_mode": self.blend_mode,
         }
 
 
@@ -47,6 +57,10 @@ class Stroke:
     points: list[Point]
     brush_size: int
     opacity: int
+    blend_mode: str = DEFAULT_BLEND_MODE
+    text_color: str = DEFAULT_TEXT_COLOR
+    angle_offset: int = 0
+    mask_softness: int = 1
     visible: bool = True
 
 

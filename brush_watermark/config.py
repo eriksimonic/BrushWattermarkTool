@@ -15,8 +15,9 @@ DEFAULT_SETTINGS = {
     "brush_size": 120,
     "angle_offset": 0,
     "mask_softness": 1,
-    "text_color": "white",
+    "text_color": "#ffffff",
     "auto_fit_text": True,
+    "blend_mode": "soft_light",
 }
 
 

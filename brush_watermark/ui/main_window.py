@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessag
 from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
 from brush_watermark.geometry.points import clamp, dist
 from brush_watermark.models import CanvasView, Settings
+from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.document import Document
 from brush_watermark.ui.canvas import CanvasWidget
@@ -27,6 +28,7 @@ class MainWindow(QMainWindow):
     def __init__(self, image_path: Path, settings: Settings):
         super().__init__()
         self.doc = Document(image_path, settings)
+        self.swatch_colors = build_swatch_palette(self.doc.original)
         self.last_pointer: Optional[tuple[float, float]] = None
 
         self.preview_pixmap: Optional[QPixmap] = None
@@ -85,17 +87,17 @@ class MainWindow(QMainWindow):
         self.sidebar_scroll.setFixedWidth(320)
         root.addWidget(self.sidebar_scroll)
 
-        self.sidebar = SidebarPanel(self.doc.settings)
+        self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors)
         self.sidebar_scroll.setWidget(self.sidebar)
 
     def _connect_signals(self):
-        self.sidebar.settings_changed.connect(self.global_controls_changed)
+        self.sidebar.document_settings_changed.connect(self.document_settings_changed)
+        self.sidebar.stroke_controls_changed.connect(self.stroke_controls_changed)
         self.sidebar.layer_selected.connect(self.on_layer_selected)
         self.sidebar.layer_item_pressed.connect(self.on_layer_item_pressed)
         self.sidebar.layer_item_clicked.connect(self.on_layer_item_clicked)
         self.sidebar.delete_selected.connect(self.delete_selected_stroke)
         self.sidebar.delete_all.connect(self.clear_all)
-        self.sidebar.selected_stroke_changed.connect(self.selected_stroke_controls_changed)
         self.sidebar.save_and_close.connect(self.save_and_close)
         self.sidebar.exit_without_saving.connect(self.exit_without_saving)
 
@@ -118,60 +120,55 @@ class MainWindow(QMainWindow):
             brush_size=self.sidebar.brush_size_slider.value(),
         )
 
-    def _sync_settings_from_sidebar(self):
-        self.doc.settings = self.sidebar.read_settings()
+    def _sync_document_settings_from_sidebar(self):
+        self.doc.settings = self.sidebar.read_document_settings(self.doc.settings)
+
+    def _sync_tool_defaults_from_sidebar(self):
+        tool = self.sidebar.read_tool_defaults()
+        self.doc.settings.opacity = tool["opacity"]
+        self.doc.settings.brush_size = tool["brush_size"]
+        self.doc.settings.angle_offset = tool["angle_offset"]
+        self.doc.settings.text_color = tool["text_color"]
+        self.doc.settings.blend_mode = tool["blend_mode"]
+        self.doc.settings.mask_softness = tool["mask_softness"]
+
+    def _layer_selected(self) -> bool:
+        return 0 <= self.doc.selected_stroke_index < len(self.doc.strokes)
 
     def update_labels(self):
-        self._sync_settings_from_sidebar()
-        brush = self.doc.settings.brush_size
-        font = font_size_from_brush(brush)
         sb = self.sidebar
-        sb.set_field_label_value(sb.opacity_value_label, f"{self.doc.settings.opacity}%")
+        controls = sb.read_stroke_controls()
+        brush = controls["brush_size"]
+        sb.set_field_label_value(sb.opacity_value_label, f"{controls['opacity']}%")
         sb.set_field_label_value(sb.brush_value_label, f"{brush} px")
-        sb.font_size_value_label.setText(f"Font {font} px (follows brush)")
-        sb.set_field_label_value(sb.angle_value_label, f"{self.doc.settings.angle_offset}°")
-        sb.set_field_label_value(sb.softness_value_label, f"{self.doc.settings.mask_softness} px")
+        sb.font_size_value_label.setText(f"Font {font_size_from_brush(brush)} px (follows brush)")
+        sb.set_field_label_value(sb.angle_value_label, f"{controls['angle_offset']}°")
+        sb.set_field_label_value(sb.softness_value_label, f"{controls['mask_softness']} px")
+        sb.delete_selected_btn.setEnabled(self._layer_selected())
 
-        enabled = 0 <= self.doc.selected_stroke_index < len(self.doc.strokes)
-        sb.sel_brush_slider.setEnabled(enabled)
-        sb.sel_opacity_slider.setEnabled(enabled)
-        sb.delete_selected_btn.setEnabled(enabled)
-
-        if enabled:
-            stroke = self.doc.strokes[self.doc.selected_stroke_index]
-            sbrush = int(sb.sel_brush_slider.value())
-            visibility_text = "visible" if stroke.visible else "hidden"
-            sb.selected_info_label.setText(f"{stroke.name} · {visibility_text}")
-            sb.set_field_label_value(sb.sel_brush_value_label, f"{sbrush} px")
-            sb.sel_font_value_label.setText(f"Font {font_size_from_brush(sbrush)} px")
-            sb.set_field_label_value(sb.sel_opacity_value_label, f"{int(sb.sel_opacity_slider.value())}%")
-        else:
-            sb.selected_info_label.setText("No stroke selected")
-            sb.set_field_label_value(sb.sel_brush_value_label, "—")
-            sb.sel_font_value_label.setText("")
-            sb.set_field_label_value(sb.sel_opacity_value_label, "—")
-
-    def global_controls_changed(self):
-        self._sync_settings_from_sidebar()
+    def document_settings_changed(self):
+        self._sync_document_settings_from_sidebar()
+        if not self._layer_selected():
+            self._sync_tool_defaults_from_sidebar()
         save_settings(self.doc.settings.to_dict())
         self.update_labels()
         self.canvas.update()
         self.schedule_preview()
 
-    def selected_stroke_controls_changed(self):
-        if 0 <= self.doc.selected_stroke_index < len(self.doc.strokes):
-            self.doc.update_selected_stroke(
-                int(self.sidebar.sel_brush_slider.value()),
-                int(self.sidebar.sel_opacity_slider.value()),
-            )
+    def stroke_controls_changed(self):
+        if self._layer_selected():
+            self.doc.update_selected_stroke(**self.sidebar.read_stroke_controls())
             self.refresh_stroke_list()
-            self.update_labels()
-            self.schedule_preview()
+        else:
+            self._sync_tool_defaults_from_sidebar()
+            save_settings(self.doc.settings.to_dict())
+        self.update_labels()
+        self.schedule_preview()
 
     def sync_list_selection(self):
         self._ignore_list_selection = True
         self.sidebar.stroke_list.blockSignals(True)
-        if 0 <= self.doc.selected_stroke_index < len(self.doc.strokes):
+        if self._layer_selected():
             self.sidebar.stroke_list.setCurrentRow(self.doc.selected_stroke_index)
         else:
             self.sidebar.stroke_list.clearSelection()
@@ -226,33 +223,21 @@ class MainWindow(QMainWindow):
         self.left_press_on_selected = False
 
     def handle_wheel(self, step: int, alt: bool):
-        if 0 <= self.doc.selected_stroke_index < len(self.doc.strokes):
-            if alt:
-                value = clamp(self.sidebar.sel_brush_slider.value() + step * 12, 5, 600)
-                self.sidebar.sel_brush_slider.setValue(int(value))
-            else:
-                value = clamp(self.sidebar.sel_opacity_slider.value() + step * 2, 1, 100)
-                self.sidebar.sel_opacity_slider.setValue(int(value))
+        sb = self.sidebar
+        if alt:
+            value = clamp(sb.brush_size_slider.value() + step * 12, 5, 600)
+            sb.brush_size_slider.setValue(int(value))
         else:
-            if alt:
-                value = clamp(self.sidebar.brush_size_slider.value() + step * 12, 5, 600)
-                self.sidebar.brush_size_slider.setValue(int(value))
-            else:
-                value = clamp(self.sidebar.opacity_slider.value() + step * 2, 1, 100)
-                self.sidebar.opacity_slider.setValue(int(value))
+            value = clamp(sb.opacity_slider.value() + step * 2, 1, 100)
+            sb.opacity_slider.setValue(int(value))
 
     def select_stroke_by_index(self, index: int, refresh_preview: bool = True):
         self.doc.select_stroke(index)
         self.sync_list_selection()
-        if 0 <= index < len(self.doc.strokes):
-            stroke = self.doc.strokes[index]
-            sb = self.sidebar
-            sb.sel_brush_slider.blockSignals(True)
-            sb.sel_opacity_slider.blockSignals(True)
-            sb.sel_brush_slider.setValue(stroke.brush_size)
-            sb.sel_opacity_slider.setValue(stroke.opacity)
-            sb.sel_brush_slider.blockSignals(False)
-            sb.sel_opacity_slider.blockSignals(False)
+        if self._layer_selected():
+            self.sidebar.load_stroke_controls(self.doc.strokes[index])
+        else:
+            self.sidebar.load_tool_defaults(self.doc.settings)
         self.update_labels()
         if refresh_preview:
             self.schedule_preview()
@@ -305,7 +290,7 @@ class MainWindow(QMainWindow):
             self.doc.selected_stroke_index >= 0
             and self.doc.point_near_stroke(self.doc.selected_stroke_index, img_x, img_y, extra_tol=24.0)
         )
-        self.doc.current_brush_size = self.doc.settings.brush_size
+        self.doc.current_brush_size = self.sidebar.brush_size_slider.value()
         self.doc.current_points = []
         self.last_img_xy = None
         self.is_painting = False
@@ -341,10 +326,15 @@ class MainWindow(QMainWindow):
         if self.is_painting and self.doc.current_points:
             cleaned = self.doc.finalize_stroke_points(self.doc.current_points, self.doc.current_brush_size)
             if len(cleaned) >= 2:
+                controls = self.sidebar.read_stroke_controls()
                 self.doc.add_stroke(
                     cleaned,
                     self.doc.current_brush_size,
-                    self.doc.settings.opacity,
+                    controls["opacity"],
+                    controls["blend_mode"],
+                    controls["text_color"],
+                    controls["angle_offset"],
+                    controls["mask_softness"],
                 )
                 self.refresh_stroke_list()
                 self.select_stroke_by_index(len(self.doc.strokes) - 1, refresh_preview=False)
@@ -393,7 +383,9 @@ class MainWindow(QMainWindow):
         self.schedule_preview()
 
     def save_and_close(self):
-        self._sync_settings_from_sidebar()
+        self._sync_document_settings_from_sidebar()
+        if not self._layer_selected():
+            self._sync_tool_defaults_from_sidebar()
         save_settings(self.doc.settings.to_dict())
         if not self.doc.strokes:
             answer = QMessageBox.question(
@@ -412,6 +404,8 @@ class MainWindow(QMainWindow):
         self.close()
 
     def exit_without_saving(self):
-        self._sync_settings_from_sidebar()
+        self._sync_document_settings_from_sidebar()
+        if not self._layer_selected():
+            self._sync_tool_defaults_from_sidebar()
         save_settings(self.doc.settings.to_dict())
         self.close()

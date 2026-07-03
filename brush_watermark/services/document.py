@@ -13,6 +13,8 @@ from brush_watermark.geometry.points import (
     simplify_points,
 )
 from brush_watermark.models import Settings, Stroke
+from brush_watermark.rendering.blend import blend_mode_short
+from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_preview_image
 
 
@@ -46,9 +48,12 @@ class Document:
     def stroke_list_text(self, idx: int, stroke: Stroke) -> str:
         eye = "👁" if stroke.visible else "🚫"
         length = int(path_length(stroke.points))
+        color = color_short(stroke.text_color)
         return (
             f"{eye}  {stroke.name}  |  len {length}px  |  "
-            f"b{stroke.brush_size}  |  o{stroke.opacity}%"
+            f"b{stroke.brush_size}  |  s{stroke.opacity}%  |  "
+            f"{blend_mode_short(stroke.blend_mode)}  |  #{color}  |  "
+            f"{stroke.angle_offset}°"
         )
 
     def text_span_info(self, points: list[Point], brush_size: int):
@@ -76,6 +81,10 @@ class Document:
                     points=pts,
                     brush_size=max(1, int(round(stroke.brush_size * scale_factor))),
                     opacity=stroke.opacity,
+                    blend_mode=stroke.blend_mode,
+                    text_color=stroke.text_color,
+                    angle_offset=stroke.angle_offset,
+                    mask_softness=stroke.mask_softness,
                 )
             )
         return scaled
@@ -135,13 +144,26 @@ class Document:
                 best_idx = idx
         return best_idx
 
-    def add_stroke(self, points: list[Point], brush_size: int, opacity: int) -> Stroke:
+    def add_stroke(
+        self,
+        points: list[Point],
+        brush_size: int,
+        opacity: int,
+        blend_mode: str,
+        text_color: str,
+        angle_offset: int,
+        mask_softness: int,
+    ) -> Stroke:
         stroke = Stroke(
             name=f"Stroke {self.stroke_counter}",
             visible=True,
             points=points,
             brush_size=brush_size,
             opacity=opacity,
+            blend_mode=blend_mode,
+            text_color=text_color,
+            angle_offset=angle_offset,
+            mask_softness=mask_softness,
         )
         self.stroke_counter += 1
         self.strokes.append(stroke)
@@ -157,11 +179,23 @@ class Document:
             return
         self.selected_stroke_index = index
 
-    def update_selected_stroke(self, brush_size: int, opacity: int) -> None:
+    def update_selected_stroke(
+        self,
+        brush_size: int,
+        opacity: int,
+        blend_mode: str,
+        text_color: str,
+        angle_offset: int,
+        mask_softness: int,
+    ) -> None:
         if 0 <= self.selected_stroke_index < len(self.strokes):
             stroke = self.strokes[self.selected_stroke_index]
             stroke.brush_size = brush_size
             stroke.opacity = opacity
+            stroke.blend_mode = blend_mode
+            stroke.text_color = text_color
+            stroke.angle_offset = angle_offset
+            stroke.mask_softness = mask_softness
 
     def delete_selected_stroke(self) -> None:
         if 0 <= self.selected_stroke_index < len(self.strokes):

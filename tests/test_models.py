@@ -9,11 +9,17 @@ class TestSettings:
         assert s.opacity == 22
 
     def test_round_trip(self):
-        original = Settings(watermark_text="Test", opacity=50, brush_size=80)
+        original = Settings(
+            watermark_text="Test",
+            opacity=50,
+            brush_size=80,
+            blend_mode="difference",
+        )
         restored = Settings.from_dict(original.to_dict())
         assert restored.watermark_text == "Test"
         assert restored.opacity == 50
         assert restored.brush_size == 80
+        assert restored.blend_mode == "difference"
 
 
 class TestStroke:

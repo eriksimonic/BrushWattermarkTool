@@ -13,64 +13,48 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from brush_watermark.models import Settings
+from brush_watermark.models import Settings, Stroke
+from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
+from brush_watermark.ui.color_picker import ColorSwatchPicker
 
 
 class SidebarPanel(QWidget):
-    settings_changed = Signal()
+    document_settings_changed = Signal()
+    stroke_controls_changed = Signal()
     layer_selected = Signal(int)
     layer_item_pressed = Signal(int)
     layer_item_clicked = Signal(int)
     delete_selected = Signal()
     delete_all = Signal()
-    selected_stroke_changed = Signal()
     save_and_close = Signal()
     exit_without_saving = Signal()
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, swatch_colors: list[str]):
         super().__init__()
+        self._swatch_colors = swatch_colors
         self._build_ui(settings)
         self._connect_signals()
+        self.load_tool_defaults(settings)
 
     def _build_ui(self, settings: Settings):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        defaults_card, defaults_layout = self._make_card("New stroke defaults")
-        layout.addWidget(defaults_card)
+        watermark_card, watermark_layout = self._make_card("Watermark")
+        layout.addWidget(watermark_card)
 
         self.watermark_text_edit = QLineEdit(settings.watermark_text)
         self.font_combo = QComboBox()
         self.font_combo.addItems(list(font_candidates().keys()))
         self.font_combo.setCurrentText(settings.font_name)
-        self.color_combo = QComboBox()
-        self.color_combo.addItems(["white", "black"])
-        self.color_combo.setCurrentText(settings.text_color)
-
-        self.opacity_value_label = self._make_field_label("Opacity")
-        self.opacity_slider = self._make_slider(1, 100, settings.opacity)
-        self.brush_value_label = self._make_field_label("Brush")
-        self.brush_size_slider = self._make_slider(5, 600, settings.brush_size)
-        self.font_size_value_label = QLabel()
-        self.font_size_value_label.setObjectName("HintLabel")
-        self.angle_value_label = self._make_field_label("Angle")
-        self.angle_slider = self._make_slider(-20, 20, settings.angle_offset)
-        self.softness_value_label = self._make_field_label("Softness")
-        self.softness_slider = self._make_slider(0, 20, settings.mask_softness)
         self.auto_fit_check = QCheckBox("Auto fit text to stroke")
         self.auto_fit_check.setChecked(settings.auto_fit_text)
 
-        self._add_form_row(defaults_layout, "Text", self.watermark_text_edit)
-        self._add_form_row(defaults_layout, "Font", self.font_combo)
-        self._add_form_row(defaults_layout, "Color", self.color_combo)
-        self._add_slider_row(defaults_layout, self.opacity_value_label, self.opacity_slider)
-        self._add_slider_row(defaults_layout, self.brush_value_label, self.brush_size_slider)
-        defaults_layout.addWidget(self.font_size_value_label)
-        self._add_slider_row(defaults_layout, self.angle_value_label, self.angle_slider)
-        self._add_slider_row(defaults_layout, self.softness_value_label, self.softness_slider)
-        defaults_layout.addWidget(self.auto_fit_check)
+        self._add_form_row(watermark_layout, "Text", self.watermark_text_edit)
+        self._add_form_row(watermark_layout, "Font", self.font_combo)
+        watermark_layout.addWidget(self.auto_fit_check)
 
         stroke_card, stroke_layout = self._make_card("Layers")
         layout.addWidget(stroke_card)
@@ -88,20 +72,37 @@ class SidebarPanel(QWidget):
         layer_actions.addWidget(self.delete_all_btn)
         layout.addLayout(layer_actions)
 
-        selected_card, selected_layout = self._make_card("Selected layer")
-        layout.addWidget(selected_card)
-        self.selected_info_label = QLabel("No stroke selected")
-        self.selected_info_label.setObjectName("HintLabel")
-        self.sel_brush_value_label = self._make_field_label("Brush")
-        self.sel_brush_slider = self._make_slider(5, 600, 120)
-        self.sel_font_value_label = QLabel()
-        self.sel_font_value_label.setObjectName("HintLabel")
-        self.sel_opacity_value_label = self._make_field_label("Opacity")
-        self.sel_opacity_slider = self._make_slider(1, 100, 22)
-        selected_layout.addWidget(self.selected_info_label)
-        self._add_slider_row(selected_layout, self.sel_brush_value_label, self.sel_brush_slider)
-        selected_layout.addWidget(self.sel_font_value_label)
-        self._add_slider_row(selected_layout, self.sel_opacity_value_label, self.sel_opacity_slider)
+        controls_card, controls_layout = self._make_card("Controls")
+        layout.addWidget(controls_card)
+        self.context_label = QLabel("Tool defaults")
+        self.context_label.setObjectName("HintLabel")
+        controls_layout.addWidget(self.context_label)
+
+        self.color_picker = ColorSwatchPicker()
+        self.color_picker.set_swatches(self._swatch_colors, settings.text_color)
+        controls_layout.addWidget(self.color_picker)
+
+        self.blend_combo = QComboBox()
+        for mode_key, mode_label in BLEND_MODE_CHOICES:
+            self.blend_combo.addItem(mode_label, mode_key)
+
+        self.opacity_value_label = self._make_field_label("Strength")
+        self.opacity_slider = self._make_slider(1, 100, settings.opacity)
+        self.brush_value_label = self._make_field_label("Brush")
+        self.brush_size_slider = self._make_slider(5, 600, settings.brush_size)
+        self.font_size_value_label = QLabel()
+        self.font_size_value_label.setObjectName("HintLabel")
+        self.angle_value_label = self._make_field_label("Angle")
+        self.angle_slider = self._make_slider(-20, 20, settings.angle_offset)
+        self.softness_value_label = self._make_field_label("Softness")
+        self.softness_slider = self._make_slider(0, 20, settings.mask_softness)
+
+        self._add_form_row(controls_layout, "Blend", self.blend_combo)
+        self._add_slider_row(controls_layout, self.opacity_value_label, self.opacity_slider)
+        self._add_slider_row(controls_layout, self.brush_value_label, self.brush_size_slider)
+        controls_layout.addWidget(self.font_size_value_label)
+        self._add_slider_row(controls_layout, self.angle_value_label, self.angle_slider)
+        self._add_slider_row(controls_layout, self.softness_value_label, self.softness_slider)
 
         actions = QVBoxLayout()
         actions.setSpacing(6)
@@ -119,8 +120,8 @@ class SidebarPanel(QWidget):
         layout.addWidget(help_card)
         help_text = QLabel(
             "Paint: left mouse · Select: click watermark · Deselect: click again · "
-            "Erase: right mouse · Wheel: opacity · Alt+wheel: brush/font size · "
-            "Selected layer shows a faint guide."
+            "Erase: right mouse · Wheel: strength · Alt+wheel: brush/font size · "
+            "Controls edit the selected layer, or tool defaults when nothing is selected."
         )
         help_text.setWordWrap(True)
         help_text.setObjectName("HintLabel")
@@ -128,17 +129,19 @@ class SidebarPanel(QWidget):
         layout.addStretch(1)
 
     def _connect_signals(self):
-        emit_settings = lambda *_: self.settings_changed.emit()
-        emit_selected = lambda *_: self.selected_stroke_changed.emit()
+        emit_document = lambda *_: self.document_settings_changed.emit()
+        emit_controls = lambda *_: self.stroke_controls_changed.emit()
 
-        self.watermark_text_edit.textChanged.connect(emit_settings)
-        self.font_combo.currentTextChanged.connect(emit_settings)
-        self.color_combo.currentTextChanged.connect(emit_settings)
-        self.opacity_slider.valueChanged.connect(emit_settings)
-        self.brush_size_slider.valueChanged.connect(emit_settings)
-        self.angle_slider.valueChanged.connect(emit_settings)
-        self.softness_slider.valueChanged.connect(emit_settings)
-        self.auto_fit_check.toggled.connect(emit_settings)
+        self.watermark_text_edit.textChanged.connect(emit_document)
+        self.font_combo.currentTextChanged.connect(emit_document)
+        self.auto_fit_check.toggled.connect(emit_document)
+
+        self.color_picker.color_changed.connect(emit_controls)
+        self.blend_combo.currentIndexChanged.connect(emit_controls)
+        self.opacity_slider.valueChanged.connect(emit_controls)
+        self.brush_size_slider.valueChanged.connect(emit_controls)
+        self.angle_slider.valueChanged.connect(emit_controls)
+        self.softness_slider.valueChanged.connect(emit_controls)
 
         self.stroke_list.currentRowChanged.connect(self.layer_selected.emit)
         self.stroke_list.itemPressed.connect(
@@ -149,10 +152,76 @@ class SidebarPanel(QWidget):
         )
         self.delete_selected_btn.clicked.connect(self.delete_selected.emit)
         self.delete_all_btn.clicked.connect(self.delete_all.emit)
-        self.sel_brush_slider.valueChanged.connect(emit_selected)
-        self.sel_opacity_slider.valueChanged.connect(emit_selected)
         self.ok_button.clicked.connect(self.save_and_close.emit)
         self.exit_button.clicked.connect(self.exit_without_saving.emit)
+
+    def set_context_label(self, text: str):
+        self.context_label.setText(text)
+
+    def _block_control_signals(self, block: bool):
+        widgets = (
+            self.color_picker,
+            self.blend_combo,
+            self.opacity_slider,
+            self.brush_size_slider,
+            self.angle_slider,
+            self.softness_slider,
+        )
+        for widget in widgets:
+            widget.blockSignals(block)
+
+    def load_tool_defaults(self, settings: Settings):
+        self._block_control_signals(True)
+        self.brush_size_slider.setValue(settings.brush_size)
+        self.opacity_slider.setValue(settings.opacity)
+        self.angle_slider.setValue(settings.angle_offset)
+        self.softness_slider.setValue(settings.mask_softness)
+        self.color_picker.set_selected(settings.text_color)
+        blend_index = self.blend_combo.findData(settings.blend_mode)
+        if blend_index >= 0:
+            self.blend_combo.setCurrentIndex(blend_index)
+        self._block_control_signals(False)
+        self.set_context_label("Tool defaults")
+
+    def load_stroke_controls(self, stroke: Stroke):
+        self._block_control_signals(True)
+        self.brush_size_slider.setValue(stroke.brush_size)
+        self.opacity_slider.setValue(stroke.opacity)
+        self.angle_slider.setValue(stroke.angle_offset)
+        self.softness_slider.setValue(stroke.mask_softness)
+        self.color_picker.set_selected(stroke.text_color)
+        blend_index = self.blend_combo.findData(stroke.blend_mode)
+        if blend_index >= 0:
+            self.blend_combo.setCurrentIndex(blend_index)
+        self._block_control_signals(False)
+        visibility = "visible" if stroke.visible else "hidden"
+        self.set_context_label(f"Layer: {stroke.name} · {visibility}")
+
+    def read_document_settings(self, tool_defaults: Settings) -> Settings:
+        return Settings(
+            watermark_text=self.watermark_text_edit.text(),
+            opacity=tool_defaults.opacity,
+            font_name=self.font_combo.currentText(),
+            brush_size=tool_defaults.brush_size,
+            angle_offset=tool_defaults.angle_offset,
+            mask_softness=tool_defaults.mask_softness,
+            text_color=tool_defaults.text_color,
+            auto_fit_text=bool(self.auto_fit_check.isChecked()),
+            blend_mode=tool_defaults.blend_mode,
+        )
+
+    def read_stroke_controls(self) -> dict:
+        return {
+            "brush_size": int(self.brush_size_slider.value()),
+            "opacity": int(self.opacity_slider.value()),
+            "blend_mode": str(self.blend_combo.currentData()),
+            "text_color": self.color_picker.selected_color(),
+            "angle_offset": int(self.angle_slider.value()),
+            "mask_softness": int(self.softness_slider.value()),
+        }
+
+    def read_tool_defaults(self) -> dict:
+        return self.read_stroke_controls()
 
     def _make_card(self, title: str):
         card = QFrame()
@@ -199,15 +268,3 @@ class SidebarPanel(QWidget):
         s.setRange(low, high)
         s.setValue(value)
         return s
-
-    def read_settings(self) -> Settings:
-        return Settings(
-            watermark_text=self.watermark_text_edit.text(),
-            opacity=int(self.opacity_slider.value()),
-            font_name=self.font_combo.currentText(),
-            brush_size=int(self.brush_size_slider.value()),
-            angle_offset=int(self.angle_slider.value()),
-            mask_softness=int(self.softness_slider.value()),
-            text_color=self.color_combo.currentText(),
-            auto_fit_text=bool(self.auto_fit_check.isChecked()),
-        )

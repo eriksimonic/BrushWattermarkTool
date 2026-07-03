@@ -72,7 +72,7 @@ class TestCompositeWatermark:
             watermark_text="TEST",
             opacity=100,
             brush_size=40,
-            text_color="white",
+            text_color="#ffffff",
         )
         erase_mask = Image.new("L", (200, 200), 0)
         result = composite_watermark(base, [stroke], settings, erase_mask)
