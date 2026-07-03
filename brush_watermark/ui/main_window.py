@@ -1,3 +1,5 @@
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -13,7 +15,10 @@ from brush_watermark.geometry.points import clamp, dist
 from brush_watermark.models import CanvasView, Settings
 from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
+from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.document import Document
+from brush_watermark.services.update_check import UpdateCheckResult
+from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.canvas import CanvasWidget
 from brush_watermark.ui.sidebar import SidebarPanel
 from brush_watermark.ui.styles import app_stylesheet
@@ -50,6 +55,8 @@ class MainWindow(QMainWindow):
         self._list_toggle_row = -1
         self._ignore_list_selection = False
         self._update_checker: UpdateChecker | None = None
+        self._auto_updater: AutoUpdater | None = None
+        self._update_result: UpdateCheckResult | None = None
 
         self.setWindowTitle(f"{APP_NAME} - {self.doc.image_path.name}")
         self.resize(1560, 980)
@@ -58,9 +65,9 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
-        self._start_update_check()
         self.update_labels()
         self.schedule_preview(1)
+        QTimer.singleShot(0, self._start_update_check)
 
     def _build_ui(self):
         central = QWidget()
@@ -104,6 +111,7 @@ class MainWindow(QMainWindow):
         self.sidebar.delete_all.connect(self.clear_all)
         self.sidebar.save_and_close.connect(self.save_and_close)
         self.sidebar.exit_without_saving.connect(self.exit_without_saving)
+        self.sidebar.update_now.connect(self.start_auto_update)
 
     def _start_update_check(self):
         self.sidebar.set_version_info(__version__)
@@ -113,8 +121,50 @@ class MainWindow(QMainWindow):
         checker.start()
 
     def _on_update_check_finished(self, result):
+        self._update_result = result
         self.sidebar.set_version_info(__version__, result)
         self._update_checker = None
+
+    def start_auto_update(self):
+        result = self._update_result
+        if (
+            result is None
+            or not result.update_available
+            or not result.download_url
+            or not can_auto_update()
+        ):
+            return
+
+        answer = QMessageBox.question(
+            self,
+            APP_NAME,
+            f"Download and install version {result.latest_version}?\n\n"
+            "The app will close and restart automatically. "
+            "Unsaved image changes will be lost.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self._sync_document_settings_from_sidebar()
+        if not self._layer_selected():
+            self._sync_tool_defaults_from_sidebar()
+        save_settings(self.doc.settings.to_dict())
+
+        self.sidebar.set_update_progress(0, "Preparing update…")
+        updater = AutoUpdater(result.download_url, os.getpid(), sys.argv[1:])
+        updater.progress.connect(self.sidebar.set_update_progress)
+        updater.failed.connect(self._on_auto_update_failed)
+        self._auto_updater = updater
+        updater.start()
+
+    def _on_auto_update_failed(self, message: str):
+        self._auto_updater = None
+        self.sidebar.clear_update_progress()
+        QMessageBox.critical(
+            self,
+            APP_NAME,
+            f"Could not install the update.\n\n{message}",
+        )
 
     def _on_pointer_move(self, x: float, y: float):
         self.last_pointer = (x, y)

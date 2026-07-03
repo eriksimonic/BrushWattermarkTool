@@ -10,6 +10,10 @@ VERSION_RAW_URL = (
     f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/VERSION"
 )
 RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases/latest"
+GITHUB_API_LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+UPDATE_ASSET_NAME = "BrushWatermark.zip"
+UPDATE_ASSET_FILENAME = UPDATE_ASSET_NAME
+USER_AGENT = "BrushWatermark"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg"}
 CONFIG_DIR = Path.home() / ".lightroom_brush_watermark"
 CONFIG_FILE = CONFIG_DIR / "settings.json"

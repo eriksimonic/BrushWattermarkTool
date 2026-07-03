@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
+from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
 
@@ -30,6 +31,7 @@ class SidebarPanel(QWidget):
     delete_all = Signal()
     save_and_close = Signal()
     exit_without_saving = Signal()
+    update_now = Signal()
 
     def __init__(self, settings: Settings, swatch_colors: list[str]):
         super().__init__()
@@ -135,6 +137,14 @@ class SidebarPanel(QWidget):
         self.update_status_label.setWordWrap(True)
         self.update_status_label.setOpenExternalLinks(True)
         help_layout.addWidget(self.update_status_label)
+        self.update_now_button = QPushButton("Download and install update")
+        self.update_now_button.setObjectName("PrimaryButton")
+        self.update_now_button.hide()
+        help_layout.addWidget(self.update_now_button)
+        self.update_progress_label = QLabel()
+        self.update_progress_label.setObjectName("HintLabel")
+        self.update_progress_label.hide()
+        help_layout.addWidget(self.update_progress_label)
         layout.addStretch(1)
 
     def _connect_signals(self):
@@ -163,6 +173,7 @@ class SidebarPanel(QWidget):
         self.delete_all_btn.clicked.connect(self.delete_all.emit)
         self.ok_button.clicked.connect(self.save_and_close.emit)
         self.exit_button.clicked.connect(self.exit_without_saving.emit)
+        self.update_now_button.clicked.connect(self.update_now.emit)
 
     def set_context_label(self, text: str):
         self.context_label.setText(text)
@@ -234,6 +245,7 @@ class SidebarPanel(QWidget):
 
     def set_version_info(self, current_version: str, result: UpdateCheckResult | None = None):
         self.version_label.setText(f"Version {current_version}")
+        self.update_now_button.hide()
         if result is None:
             self.update_status_label.setText("Checking for updates...")
             return
@@ -241,13 +253,29 @@ class SidebarPanel(QWidget):
             self.update_status_label.setText("")
             return
         if result.update_available and result.latest_version:
-            self.update_status_label.setText(
-                f'<a href="{result.release_url}">'
-                f"Version {result.latest_version} is available — open release page"
-                f"</a>"
-            )
+            if can_auto_update() and result.download_url:
+                self.update_status_label.setText(
+                    f"Version {result.latest_version} is available."
+                )
+                self.update_now_button.show()
+            else:
+                self.update_status_label.setText(
+                    f'<a href="{result.release_url}">'
+                    f"Version {result.latest_version} is available — open release page"
+                    f"</a>"
+                )
             return
         self.update_status_label.setText("You have the latest version.")
+
+    def set_update_progress(self, percent: int, message: str):
+        self.update_now_button.setEnabled(False)
+        self.update_progress_label.show()
+        self.update_progress_label.setText(message if percent >= 100 else f"{message} ({percent}%)")
+
+    def clear_update_progress(self):
+        self.update_now_button.setEnabled(True)
+        self.update_progress_label.hide()
+        self.update_progress_label.setText("")
 
     def _make_card(self, title: str):
         card = QFrame()

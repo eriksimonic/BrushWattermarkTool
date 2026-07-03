@@ -6,7 +6,6 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from brush_watermark.config import APP_NAME, SUPPORTED_EXTENSIONS, load_settings
 from brush_watermark.models import Settings
-from brush_watermark.ui.main_window import MainWindow
 
 
 def select_jpg_file() -> Optional[Path]:
@@ -37,6 +36,8 @@ def main() -> int:
     if image_path is None:
         return 0
     try:
+        from brush_watermark.ui.main_window import MainWindow
+
         settings = Settings.from_dict(load_settings())
         window = MainWindow(image_path, settings)
         window.show()

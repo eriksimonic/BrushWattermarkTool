@@ -16,6 +16,7 @@ Each watermark is saved into the image file itself (JPEG). Settings such as defa
 - **Image color picker** — 8 colors sampled from the photo, plus white, 50% gray, and black
 - **Erase mask** — right-click paint to hide watermark areas without deleting strokes
 - **Auto update check** — compares your version to the latest release on GitHub
+- **One-click update** — packaged Windows builds can download and install the latest release automatically
 
 ## Requirements
 
@@ -34,10 +35,10 @@ If you omit the file path, a file picker opens.
 
 ## Run the executable
 
-Download `BrushWatermark.exe` from [Releases](https://github.com/eriksimonic/BrushWattermarkTool/releases/latest), then:
+Download `BrushWatermark.zip` from [Releases](https://github.com/eriksimonic/BrushWattermarkTool/releases/latest), extract it, then:
 
 ```powershell
-BrushWatermark.exe path\to\image.jpg
+BrushWatermark\BrushWatermark.exe path\to\image.jpg
 ```
 
 ## Using the app
@@ -74,17 +75,18 @@ Tool defaults and watermark text are stored in:
 .\build.ps1
 ```
 
-Output: `dist\BrushWatermark.exe`
+Output: `dist\BrushWatermark\` (folder) and `dist\BrushWatermark.zip` (for distribution)
 
 ## Tests
 
 ```powershell
+pip install -r requirements-dev.txt
 pytest
 ```
 
 ## Releases
 
-Pushing to `main` triggers the GitHub Actions release workflow: tests, build, publish `BrushWatermark.exe`, and bump the version in the repository. The app checks the `VERSION` file on GitHub at startup to notify you when a newer release is available.
+Pushing to `main` triggers the GitHub Actions release workflow: tests, build, publish `BrushWatermark.zip`, and open a pull request that bumps the version for the next cycle (auto-merged when enabled). The app checks GitHub at startup; packaged Windows builds also offer a **Download and install update** button when a newer release is available.
 
 ---
 

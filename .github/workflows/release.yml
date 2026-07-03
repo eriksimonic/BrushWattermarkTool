@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build-and-release:
@@ -27,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
           pip install pyinstaller
 
       - name: Run tests
@@ -35,6 +36,10 @@ jobs:
 
       - name: Build executable
         run: python -m PyInstaller --noconfirm --clean BrushWatermark.spec
+
+      - name: Package release zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/BrushWatermark -DestinationPath dist/BrushWatermark.zip -Force
 
       - name: Resolve version and tag
         id: version
@@ -52,8 +57,8 @@ jobs:
           body: |
             Automated release from commit ${{ github.sha }}.
 
-            **Usage:** `BrushWatermark.exe path\to\image.jpg`
-          files: dist/BrushWatermark.exe
+            **Usage:** extract `BrushWatermark.zip`, then run `BrushWatermark.exe path\to\image.jpg`
+          files: dist/BrushWatermark.zip
           generate_release_notes: true
 
       - name: Bump minor version
@@ -87,11 +92,32 @@ jobs:
           )
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push version bump
+      - name: Open version bump pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          title: "chore: bump version to ${{ steps.bump.outputs.new_version }}"
+          body: |
+            Automated version bump after releasing v${{ steps.version.outputs.version }}.
+
+            Merging updates `__version__` and `VERSION` for the next development cycle.
+          branch: chore/bump-version-${{ steps.bump.outputs.new_version }}
+          delete-branch: true
+
+      - name: Enable auto-merge on version bump PR
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add brush_watermark/__init__.py VERSION
-          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
-          git push
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "chore/bump-version-${{ steps.bump.outputs.new_version }}" \
+            --json number \
+            --jq '.[0].number')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No version bump PR found; skipping auto-merge."
+            exit 0
+          fi
+          gh pr merge "$PR_NUMBER" --auto --squash --repo "${{ github.repository }}" || \
+            echo "Auto-merge not enabled or branch protection blocked it; merge the PR manually."
