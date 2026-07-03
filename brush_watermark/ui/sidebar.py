@@ -128,14 +128,17 @@ class SidebarPanel(QWidget):
         layout.addStretch(1)
 
     def _connect_signals(self):
-        self.watermark_text_edit.textChanged.connect(self.settings_changed.emit)
-        self.font_combo.currentTextChanged.connect(self.settings_changed.emit)
-        self.color_combo.currentTextChanged.connect(self.settings_changed.emit)
-        self.opacity_slider.valueChanged.connect(self.settings_changed.emit)
-        self.brush_size_slider.valueChanged.connect(self.settings_changed.emit)
-        self.angle_slider.valueChanged.connect(self.settings_changed.emit)
-        self.softness_slider.valueChanged.connect(self.settings_changed.emit)
-        self.auto_fit_check.toggled.connect(self.settings_changed.emit)
+        emit_settings = lambda *_: self.settings_changed.emit()
+        emit_selected = lambda *_: self.selected_stroke_changed.emit()
+
+        self.watermark_text_edit.textChanged.connect(emit_settings)
+        self.font_combo.currentTextChanged.connect(emit_settings)
+        self.color_combo.currentTextChanged.connect(emit_settings)
+        self.opacity_slider.valueChanged.connect(emit_settings)
+        self.brush_size_slider.valueChanged.connect(emit_settings)
+        self.angle_slider.valueChanged.connect(emit_settings)
+        self.softness_slider.valueChanged.connect(emit_settings)
+        self.auto_fit_check.toggled.connect(emit_settings)
 
         self.stroke_list.currentRowChanged.connect(self.layer_selected.emit)
         self.stroke_list.itemPressed.connect(
@@ -146,8 +149,8 @@ class SidebarPanel(QWidget):
         )
         self.delete_selected_btn.clicked.connect(self.delete_selected.emit)
         self.delete_all_btn.clicked.connect(self.delete_all.emit)
-        self.sel_brush_slider.valueChanged.connect(self.selected_stroke_changed.emit)
-        self.sel_opacity_slider.valueChanged.connect(self.selected_stroke_changed.emit)
+        self.sel_brush_slider.valueChanged.connect(emit_selected)
+        self.sel_opacity_slider.valueChanged.connect(emit_selected)
         self.ok_button.clicked.connect(self.save_and_close.emit)
         self.exit_button.clicked.connect(self.exit_without_saving.emit)
 
