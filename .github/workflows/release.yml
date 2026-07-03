@@ -33,39 +33,10 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Build executable
-        run: python -m PyInstaller --noconfirm --clean BrushWatermark.spec
-
-      - name: Package release zip
-        shell: pwsh
-        run: Compress-Archive -Path dist/BrushWatermark -DestinationPath dist/BrushWatermark.zip -Force
-
-      - name: Resolve version and tag
-        id: version
-        shell: bash
-        run: |
-          VERSION=$(python -c "from brush_watermark import __version__; print(__version__)")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: BrushWatermark ${{ steps.version.outputs.version }}
-          body: |
-            Automated release from commit ${{ github.sha }}.
-
-            **Usage:** extract `BrushWatermark.zip`, then run `BrushWatermark.exe path\to\image.jpg`
-          files: dist/BrushWatermark.zip
-          generate_release_notes: true
-
       - name: Bump minor version
         id: bump
         shell: bash
         run: |
-          RELEASED_VERSION=$(python -c "from brush_watermark import __version__; print(__version__)")
-          echo "$RELEASED_VERSION" > VERSION
           NEW_VERSION=$(python - <<'PY'
           import re
           from pathlib import Path
@@ -89,7 +60,34 @@ jobs:
           print(new_version)
           PY
           )
+          echo "$NEW_VERSION" > VERSION
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean BrushWatermark.spec
+
+      - name: Package release zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/BrushWatermark -DestinationPath dist/BrushWatermark.zip -Force
+
+      - name: Resolve version and tag
+        id: version
+        shell: bash
+        run: |
+          echo "version=${{ steps.bump.outputs.new_version }}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${{ steps.bump.outputs.new_version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: BrushWatermark ${{ steps.version.outputs.version }}
+          body: |
+            Automated release from commit ${{ github.sha }}.
+
+            **Usage:** extract `BrushWatermark.zip`, then run `BrushWatermark.exe path\to\image.jpg`
+          files: dist/BrushWatermark.zip
+          generate_release_notes: true
 
       - name: Commit and push version bump
         shell: bash
