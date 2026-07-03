@@ -10,11 +10,14 @@ permissions:
 
 jobs:
   build-and-release:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,16 +42,54 @@ jobs:
         run: |
           VERSION=$(python -c "from brush_watermark import __version__; print(__version__)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}-build.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: BrushWatermark ${{ steps.version.outputs.version }} (build ${{ github.run_number }})
+          name: BrushWatermark ${{ steps.version.outputs.version }}
           body: |
             Automated release from commit ${{ github.sha }}.
 
             **Usage:** `BrushWatermark.exe path\to\image.jpg`
           files: dist/BrushWatermark.exe
           generate_release_notes: true
+
+      - name: Bump minor version
+        id: bump
+        shell: bash
+        run: |
+          NEW_VERSION=$(python - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path("brush_watermark/__init__.py")
+          text = path.read_text(encoding="utf-8")
+          match = re.search(r'__version__\s*=\s*"(\d+)\.(\d+)\.(\d+)"', text)
+          if not match:
+              raise SystemExit("Could not parse __version__")
+          major, minor, _patch = map(int, match.groups())
+          new_version = f"{major}.{minor + 1}.0"
+          path.write_text(
+              re.sub(
+                  r'__version__\s*=\s*"[^"]+"',
+                  f'__version__ = "{new_version}"',
+                  text,
+                  count=1,
+              ),
+              encoding="utf-8",
+          )
+          print(new_version)
+          PY
+          )
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push version bump
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add brush_watermark/__init__.py
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git push
