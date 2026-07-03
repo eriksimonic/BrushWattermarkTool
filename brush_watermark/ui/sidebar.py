@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
+from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
 
 
@@ -126,6 +127,14 @@ class SidebarPanel(QWidget):
         help_text.setWordWrap(True)
         help_text.setObjectName("HintLabel")
         help_layout.addWidget(help_text)
+        self.version_label = QLabel()
+        self.version_label.setObjectName("HintLabel")
+        help_layout.addWidget(self.version_label)
+        self.update_status_label = QLabel()
+        self.update_status_label.setObjectName("HintLabel")
+        self.update_status_label.setWordWrap(True)
+        self.update_status_label.setOpenExternalLinks(True)
+        help_layout.addWidget(self.update_status_label)
         layout.addStretch(1)
 
     def _connect_signals(self):
@@ -222,6 +231,23 @@ class SidebarPanel(QWidget):
 
     def read_tool_defaults(self) -> dict:
         return self.read_stroke_controls()
+
+    def set_version_info(self, current_version: str, result: UpdateCheckResult | None = None):
+        self.version_label.setText(f"Version {current_version}")
+        if result is None:
+            self.update_status_label.setText("Checking for updates...")
+            return
+        if result.check_failed:
+            self.update_status_label.setText("")
+            return
+        if result.update_available and result.latest_version:
+            self.update_status_label.setText(
+                f'<a href="{result.release_url}">'
+                f"Version {result.latest_version} is available — open release page"
+                f"</a>"
+            )
+            return
+        self.update_status_label.setText("You have the latest version.")
 
     def _make_card(self, title: str):
         card = QFrame()

@@ -32,6 +32,13 @@ def app_stylesheet() -> str:
         color: #6b7280;
         font-size: 10px;
     }}
+    QLabel#HintLabel a {{
+        color: #60a5fa;
+        text-decoration: none;
+    }}
+    QLabel#HintLabel a:hover {{
+        text-decoration: underline;
+    }}
     QLineEdit, QComboBox, QListWidget, QPushButton {{
         background: {PANEL};
         border: 1px solid {BORDER};

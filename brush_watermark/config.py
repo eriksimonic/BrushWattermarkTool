@@ -4,6 +4,12 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Lightroom Brush Watermark"
+GITHUB_REPO = "eriksimonic/BrushWattermarkTool"
+GITHUB_BRANCH = "main"
+VERSION_RAW_URL = (
+    f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/VERSION"
+)
+RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases/latest"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg"}
 CONFIG_DIR = Path.home() / ".lightroom_brush_watermark"
 CONFIG_FILE = CONFIG_DIR / "settings.json"

@@ -11,6 +11,8 @@ Write-Host "Cleaning previous build outputs..."
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build, dist
 
 Write-Host "Building BrushWatermark.exe (single-file, windowed)..."
+$version = python -c "from brush_watermark import __version__; print(__version__)"
+Write-Host "  Version: $version"
 python -m PyInstaller --noconfirm --clean BrushWatermark.spec
 
 $exe = Join-Path $PSScriptRoot "dist\BrushWatermark.exe"

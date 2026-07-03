@@ -7,6 +7,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QWidget
 
+from brush_watermark import __version__
 from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
 from brush_watermark.geometry.points import clamp, dist
 from brush_watermark.models import CanvasView, Settings
@@ -16,6 +17,7 @@ from brush_watermark.services.document import Document
 from brush_watermark.ui.canvas import CanvasWidget
 from brush_watermark.ui.sidebar import SidebarPanel
 from brush_watermark.ui.styles import app_stylesheet
+from brush_watermark.ui.update_checker import UpdateChecker
 
 
 def pil_to_qpixmap(image: Image.Image) -> QPixmap:
@@ -47,6 +49,7 @@ class MainWindow(QMainWindow):
         self.left_press_on_selected = False
         self._list_toggle_row = -1
         self._ignore_list_selection = False
+        self._update_checker: UpdateChecker | None = None
 
         self.setWindowTitle(f"{APP_NAME} - {self.doc.image_path.name}")
         self.resize(1560, 980)
@@ -55,6 +58,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
+        self._start_update_check()
         self.update_labels()
         self.schedule_preview(1)
 
@@ -100,6 +104,17 @@ class MainWindow(QMainWindow):
         self.sidebar.delete_all.connect(self.clear_all)
         self.sidebar.save_and_close.connect(self.save_and_close)
         self.sidebar.exit_without_saving.connect(self.exit_without_saving)
+
+    def _start_update_check(self):
+        self.sidebar.set_version_info(__version__)
+        checker = UpdateChecker(self)
+        checker.completed.connect(self._on_update_check_finished)
+        self._update_checker = checker
+        checker.start()
+
+    def _on_update_check_finished(self, result):
+        self.sidebar.set_version_info(__version__, result)
+        self._update_checker = None
 
     def _on_pointer_move(self, x: float, y: float):
         self.last_pointer = (x, y)
