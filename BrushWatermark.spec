@@ -1,21 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
-
-datas = []
-binaries = []
-hiddenimports = []
-for pkg in ("PySide6", "PIL"):
-    tmp_ret = collect_all(pkg)
-    datas += tmp_ret[0]
-    binaries += tmp_ret[1]
-    hiddenimports += tmp_ret[2]
 
 a = Analysis(
-    ["brush_watermark.py"],
+    ['brush_watermark/main.py'],
     pathex=[],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=[],
+    datas=[],
+    hiddenimports=['PIL._tkinter_finder'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -31,7 +21,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="BrushWatermark",
+    name='BrushWatermark',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

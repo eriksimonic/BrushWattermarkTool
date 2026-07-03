@@ -1,4 +1,3 @@
-"""Backward-compatible entry point."""
 from brush_watermark.main import main
 
 if __name__ == "__main__":
