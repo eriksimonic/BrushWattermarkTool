@@ -227,5 +227,9 @@ class TestAutoUpdateHelpers:
     def test_install_directory_when_frozen(self, tmp_path: Path):
         exe = tmp_path / "BrushWatermark.exe"
         exe.write_text("", encoding="utf-8")
-        with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", str(exe)):
+        with (
+            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "platform", "win32"),
+            patch.object(sys, "executable", str(exe)),
+        ):
             assert install_directory() == tmp_path
