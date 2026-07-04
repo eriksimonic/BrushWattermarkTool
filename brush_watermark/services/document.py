@@ -53,7 +53,6 @@ class Document:
             f"{eye}  {stroke.name}  |  len {length}px  |  "
             f"b{stroke.brush_size}  |  s{stroke.opacity}%  |  "
             f"{blend_mode_short(stroke.blend_mode)}  |  #{color}  |  "
-            f"{stroke.angle_offset}°  |  "
             f"{'repeat' if stroke.repeat_text else 'stretch'}"
             f"{f' +{stroke.repeat_spacing}' if stroke.repeat_text else ''}"
         )

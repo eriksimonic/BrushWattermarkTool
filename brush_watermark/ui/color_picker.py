@@ -2,12 +2,13 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
 
 from brush_watermark.rendering.colors import closest_swatch_color, normalize_text_color, parse_rgb
+from brush_watermark.ui.design_tokens import BORDER, SELECTION_BORDER
 
 
 class ColorSwatchPicker(QWidget):
     color_changed = Signal(str)
 
-    SWATCH_SIZE = 22
+    SWATCH_SIZE = 20
 
     def __init__(self):
         super().__init__()
@@ -58,7 +59,7 @@ class ColorSwatchPicker(QWidget):
     def _refresh_styles(self):
         for button, hex_color in zip(self._buttons, self._colors):
             r, g, b = parse_rgb(hex_color)
-            border = "2px solid #60a5fa" if hex_color == self._selected else "1px solid #374151"
+            border = f"2px solid {SELECTION_BORDER}" if hex_color == self._selected else f"2px solid {BORDER}"
             button.setStyleSheet(
                 f"QPushButton {{ background-color: rgb({r}, {g}, {b}); border: {border}; "
                 f"border-radius: 4px; min-width: {self.SWATCH_SIZE}px; max-width: {self.SWATCH_SIZE}px; "

@@ -5,9 +5,9 @@ from typing import Optional
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QSizePolicy, QWidget
 
 from brush_watermark import __version__
 from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
@@ -94,11 +94,14 @@ class MainWindow(QMainWindow):
         root.addWidget(self.canvas, 1)
 
         self.sidebar_scroll = QScrollArea()
-        self.sidebar_scroll.setWidgetResizable(True)
-        self.sidebar_scroll.setFixedWidth(320)
+        self.sidebar_scroll.setWidgetResizable(False)
+        self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.sidebar_scroll.setFixedWidth(340)
         root.addWidget(self.sidebar_scroll)
 
         self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors)
+        self.sidebar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self.sidebar_scroll.setWidget(self.sidebar)
 
     def _connect_signals(self):
@@ -182,7 +185,7 @@ class MainWindow(QMainWindow):
             offset_x=self.offset_x,
             offset_y=self.offset_y,
             last_pointer=self.last_pointer,
-            brush_size=self.sidebar.brush_size_slider.value(),
+            brush_size=self.sidebar.brush_row.slider.value(),
         )
 
     def _sync_document_settings_from_sidebar(self):
@@ -206,11 +209,10 @@ class MainWindow(QMainWindow):
         sb = self.sidebar
         controls = sb.read_stroke_controls()
         brush = controls["brush_size"]
-        sb.set_field_label_value(sb.opacity_value_label, f"{controls['opacity']}%")
-        sb.set_field_label_value(sb.brush_value_label, f"{brush} px")
+        sb.set_slider_value(sb.opacity_row, f"{controls['opacity']}%")
+        sb.set_slider_value(sb.brush_row, f"{brush} px")
         sb.font_size_value_label.setText(f"Font {font_size_from_brush(brush)} px (follows brush)")
-        sb.set_field_label_value(sb.angle_value_label, f"{controls['angle_offset']}°")
-        sb.set_field_label_value(sb.softness_value_label, f"{controls['mask_softness']} px")
+        sb.set_slider_value(sb.softness_row, f"{controls['mask_softness']} px")
         sb.delete_selected_btn.setEnabled(self._layer_selected())
 
     def document_settings_changed(self):
@@ -292,11 +294,11 @@ class MainWindow(QMainWindow):
     def handle_wheel(self, step: int, alt: bool):
         sb = self.sidebar
         if alt:
-            value = clamp(sb.brush_size_slider.value() + step * 12, 5, 600)
-            sb.brush_size_slider.setValue(int(value))
+            value = clamp(sb.brush_row.slider.value() + step * 12, 5, 600)
+            sb.brush_row.slider.setValue(int(value))
         else:
-            value = clamp(sb.opacity_slider.value() + step * 2, 1, 100)
-            sb.opacity_slider.setValue(int(value))
+            value = clamp(sb.opacity_row.slider.value() + step * 2, 1, 100)
+            sb.opacity_row.slider.setValue(int(value))
 
     def select_stroke_by_index(self, index: int, refresh_preview: bool = True):
         self.doc.select_stroke(index)
@@ -357,7 +359,7 @@ class MainWindow(QMainWindow):
             self.doc.selected_stroke_index >= 0
             and self.doc.point_near_stroke(self.doc.selected_stroke_index, img_x, img_y, extra_tol=24.0)
         )
-        self.doc.current_brush_size = self.sidebar.brush_size_slider.value()
+        self.doc.current_brush_size = self.sidebar.brush_row.slider.value()
         self.doc.current_points = []
         self.last_img_xy = None
         self.is_painting = False

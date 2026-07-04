@@ -1,14 +1,12 @@
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QPushButton,
-    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -20,6 +18,7 @@ from brush_watermark.rendering.fonts import font_candidates
 from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
+from brush_watermark.ui.lightroom_controls import SectionHeader, SliderRow
 
 
 class SidebarPanel(QWidget):
@@ -37,17 +36,20 @@ class SidebarPanel(QWidget):
     def __init__(self, settings: Settings, swatch_colors: list[str]):
         super().__init__()
         self._swatch_colors = swatch_colors
+        self.setFixedWidth(340)
         self._build_ui(settings)
         self._connect_signals()
         self.load_tool_defaults(settings)
 
     def _build_ui(self, settings: Settings):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(2)
 
-        watermark_card, watermark_layout = self._make_card("Watermark")
-        layout.addWidget(watermark_card)
+        layout.addWidget(SectionHeader("Watermark"))
+        watermark_layout = QVBoxLayout()
+        watermark_layout.setSpacing(4)
+        layout.addLayout(watermark_layout)
 
         self.watermark_text_edit = QLineEdit(settings.watermark_text)
         self.font_combo = QComboBox()
@@ -60,24 +62,29 @@ class SidebarPanel(QWidget):
         self._add_form_row(watermark_layout, "Font", self.font_combo)
         watermark_layout.addWidget(self.auto_fit_check)
 
-        stroke_card, stroke_layout = self._make_card("Layers")
-        layout.addWidget(stroke_card)
+        layout.addWidget(SectionHeader("Layers"))
+        layers_layout = QVBoxLayout()
+        layers_layout.setSpacing(4)
+        layout.addLayout(layers_layout)
 
         self.stroke_list = QListWidget()
-        self.stroke_list.setFixedHeight(96)
-        stroke_layout.addWidget(self.stroke_list)
+        self.stroke_list.setFixedHeight(80)
+        self.stroke_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        layers_layout.addWidget(self.stroke_list)
 
         layer_actions = QHBoxLayout()
         layer_actions.setSpacing(6)
-        layer_actions.setContentsMargins(0, 8, 0, 0)
         self.delete_selected_btn = QPushButton("Delete")
         self.delete_all_btn = QPushButton("Clear all")
         layer_actions.addWidget(self.delete_selected_btn)
         layer_actions.addWidget(self.delete_all_btn)
-        layout.addLayout(layer_actions)
+        layers_layout.addLayout(layer_actions)
 
-        controls_card, controls_layout = self._make_card("Controls")
-        layout.addWidget(controls_card)
+        layout.addWidget(SectionHeader("Brush"))
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(3)
+        layout.addLayout(controls_layout)
+
         self.context_label = QLabel("Tool defaults")
         self.context_label.setObjectName("HintLabel")
         controls_layout.addWidget(self.context_label)
@@ -90,16 +97,11 @@ class SidebarPanel(QWidget):
         for mode_key, mode_label in BLEND_MODE_CHOICES:
             self.blend_combo.addItem(mode_label, mode_key)
 
-        self.opacity_value_label = self._make_field_label("Strength")
-        self.opacity_slider = self._make_slider(1, 100, settings.opacity)
-        self.brush_value_label = self._make_field_label("Brush")
-        self.brush_size_slider = self._make_slider(5, 600, settings.brush_size)
+        self.opacity_row = SliderRow("Strength", 1, 100, settings.opacity)
+        self.brush_row = SliderRow("Brush size", 5, 600, settings.brush_size)
         self.font_size_value_label = QLabel()
         self.font_size_value_label.setObjectName("HintLabel")
-        self.angle_value_label = self._make_field_label("Angle")
-        self.angle_slider = self._make_slider(-20, 20, settings.angle_offset)
-        self.softness_value_label = self._make_field_label("Softness")
-        self.softness_slider = self._make_slider(0, 20, settings.mask_softness)
+        self.softness_row = SliderRow("Softness", 0, 20, settings.mask_softness)
         self.repeat_text_check = QCheckBox("Repeat text along stroke")
         self.repeat_text_check.setChecked(settings.repeat_text)
         self.repeat_spacing_spin = QSpinBox()
@@ -114,15 +116,14 @@ class SidebarPanel(QWidget):
         repeat_row.addWidget(self.repeat_spacing_spin)
 
         self._add_form_row(controls_layout, "Blend", self.blend_combo)
-        self._add_slider_row(controls_layout, self.opacity_value_label, self.opacity_slider)
-        self._add_slider_row(controls_layout, self.brush_value_label, self.brush_size_slider)
+        controls_layout.addWidget(self.opacity_row)
+        controls_layout.addWidget(self.brush_row)
         controls_layout.addWidget(self.font_size_value_label)
-        self._add_slider_row(controls_layout, self.angle_value_label, self.angle_slider)
-        self._add_slider_row(controls_layout, self.softness_value_label, self.softness_slider)
+        controls_layout.addWidget(self.softness_row)
         controls_layout.addLayout(repeat_row)
 
         actions = QVBoxLayout()
-        actions.setSpacing(6)
+        actions.setSpacing(4)
         self.reveal_in_explorer_check = QCheckBox("Show in Explorer after save")
         self.reveal_in_explorer_check.setChecked(True)
         actions.addWidget(self.reveal_in_explorer_check)
@@ -133,8 +134,10 @@ class SidebarPanel(QWidget):
         actions.addWidget(self.exit_button)
         layout.addLayout(actions)
 
-        help_card, help_layout = self._make_card("Help")
-        layout.addWidget(help_card)
+        layout.addWidget(SectionHeader("Help"))
+        help_layout = QVBoxLayout()
+        help_layout.setSpacing(2)
+        layout.addLayout(help_layout)
         help_text = QLabel(
             "Paint: left mouse · Select: click watermark · Deselect: click again · "
             "Erase: right mouse · Wheel: strength · Alt+wheel: brush/font size · "
@@ -159,7 +162,12 @@ class SidebarPanel(QWidget):
         self.update_progress_label.setObjectName("HintLabel")
         self.update_progress_label.hide()
         help_layout.addWidget(self.update_progress_label)
-        layout.addStretch(1)
+
+    def _refresh_layout(self):
+        self.adjustSize()
+        parent = self.parentWidget()
+        if parent is not None:
+            parent.updateGeometry()
 
     def _connect_signals(self):
         emit_document = lambda *_: self.document_settings_changed.emit()
@@ -171,10 +179,9 @@ class SidebarPanel(QWidget):
 
         self.color_picker.color_changed.connect(emit_controls)
         self.blend_combo.currentIndexChanged.connect(emit_controls)
-        self.opacity_slider.valueChanged.connect(emit_controls)
-        self.brush_size_slider.valueChanged.connect(emit_controls)
-        self.angle_slider.valueChanged.connect(emit_controls)
-        self.softness_slider.valueChanged.connect(emit_controls)
+        self.opacity_row.slider.valueChanged.connect(emit_controls)
+        self.brush_row.slider.valueChanged.connect(emit_controls)
+        self.softness_row.slider.valueChanged.connect(emit_controls)
         self.repeat_text_check.toggled.connect(emit_controls)
         self.repeat_text_check.toggled.connect(self._update_repeat_spacing_enabled)
         self.repeat_spacing_spin.valueChanged.connect(emit_controls)
@@ -203,10 +210,9 @@ class SidebarPanel(QWidget):
         widgets = (
             self.color_picker,
             self.blend_combo,
-            self.opacity_slider,
-            self.brush_size_slider,
-            self.angle_slider,
-            self.softness_slider,
+            self.opacity_row.slider,
+            self.brush_row.slider,
+            self.softness_row.slider,
             self.repeat_text_check,
             self.repeat_spacing_spin,
         )
@@ -215,10 +221,9 @@ class SidebarPanel(QWidget):
 
     def load_tool_defaults(self, settings: Settings):
         self._block_control_signals(True)
-        self.brush_size_slider.setValue(settings.brush_size)
-        self.opacity_slider.setValue(settings.opacity)
-        self.angle_slider.setValue(settings.angle_offset)
-        self.softness_slider.setValue(settings.mask_softness)
+        self.brush_row.slider.setValue(settings.brush_size)
+        self.opacity_row.slider.setValue(settings.opacity)
+        self.softness_row.slider.setValue(settings.mask_softness)
         self.repeat_text_check.setChecked(settings.repeat_text)
         self.repeat_spacing_spin.setValue(settings.repeat_spacing)
         self.color_picker.set_selected(settings.text_color)
@@ -231,10 +236,9 @@ class SidebarPanel(QWidget):
 
     def load_stroke_controls(self, stroke: Stroke):
         self._block_control_signals(True)
-        self.brush_size_slider.setValue(stroke.brush_size)
-        self.opacity_slider.setValue(stroke.opacity)
-        self.angle_slider.setValue(stroke.angle_offset)
-        self.softness_slider.setValue(stroke.mask_softness)
+        self.brush_row.slider.setValue(stroke.brush_size)
+        self.opacity_row.slider.setValue(stroke.opacity)
+        self.softness_row.slider.setValue(stroke.mask_softness)
         self.repeat_text_check.setChecked(stroke.repeat_text)
         self.repeat_spacing_spin.setValue(stroke.repeat_spacing)
         self.color_picker.set_selected(stroke.text_color)
@@ -263,12 +267,12 @@ class SidebarPanel(QWidget):
 
     def read_stroke_controls(self) -> dict:
         return {
-            "brush_size": int(self.brush_size_slider.value()),
-            "opacity": int(self.opacity_slider.value()),
+            "brush_size": int(self.brush_row.slider.value()),
+            "opacity": int(self.opacity_row.slider.value()),
             "blend_mode": str(self.blend_combo.currentData()),
             "text_color": self.color_picker.selected_color(),
-            "angle_offset": int(self.angle_slider.value()),
-            "mask_softness": int(self.softness_slider.value()),
+            "angle_offset": 0,
+            "mask_softness": int(self.softness_row.slider.value()),
             "repeat_text": bool(self.repeat_text_check.isChecked()),
             "repeat_spacing": int(self.repeat_spacing_spin.value()),
         }
@@ -279,11 +283,14 @@ class SidebarPanel(QWidget):
     def set_version_info(self, current_version: str, result: UpdateCheckResult | None = None):
         self.version_label.setText(f"Version {current_version}")
         self.update_now_button.hide()
+        self._refresh_layout()
         if result is None:
             self.update_status_label.setText("Checking for updates...")
+            self._refresh_layout()
             return
         if result.check_failed:
             self.update_status_label.setText("")
+            self._refresh_layout()
             return
         if result.update_available and result.latest_version:
             if can_auto_update() and result.download_url:
@@ -297,39 +304,25 @@ class SidebarPanel(QWidget):
                     f"Version {result.latest_version} is available — open release page"
                     f"</a>"
                 )
+            self._refresh_layout()
             return
         self.update_status_label.setText("You have the latest version.")
+        self._refresh_layout()
 
     def set_update_progress(self, percent: int, message: str):
         self.update_now_button.setEnabled(False)
         self.update_progress_label.show()
         self.update_progress_label.setText(message if percent >= 100 else f"{message} ({percent}%)")
+        self._refresh_layout()
 
     def clear_update_progress(self):
         self.update_now_button.setEnabled(True)
         self.update_progress_label.hide()
         self.update_progress_label.setText("")
+        self._refresh_layout()
 
-    def _make_card(self, title: str):
-        card = QFrame()
-        card.setObjectName("Card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 8)
-        card_layout.setSpacing(6)
-        lbl = QLabel(title)
-        lbl.setObjectName("SectionTitle")
-        card_layout.addWidget(lbl)
-        return card, card_layout
-
-    def _make_field_label(self, prefix: str) -> QLabel:
-        label = QLabel(prefix)
-        label.setObjectName("FieldLabel")
-        label.setProperty("prefix", prefix)
-        return label
-
-    def set_field_label_value(self, label: QLabel, value_text: str):
-        prefix = label.property("prefix") or ""
-        label.setText(f"{prefix}  {value_text}" if prefix else value_text)
+    def set_slider_value(self, row: SliderRow, value_text: str):
+        row.set_value_text(value_text)
 
     def _add_form_row(self, layout: QVBoxLayout, label_text: str, widget: QWidget, label_width: int = 52):
         row = QHBoxLayout()
@@ -340,18 +333,3 @@ class SidebarPanel(QWidget):
         row.addWidget(label)
         row.addWidget(widget, 1)
         layout.addLayout(row)
-
-    def _add_slider_row(self, layout: QVBoxLayout, label: QLabel, slider: QSlider):
-        block = QVBoxLayout()
-        block.setSpacing(2)
-        block.addWidget(label)
-        block.addWidget(slider)
-        layout.addLayout(block)
-
-    def _make_slider(self, low: int, high: int, value: int) -> QSlider:
-        from PySide6.QtCore import Qt
-
-        s = QSlider(Qt.Horizontal)
-        s.setRange(low, high)
-        s.setValue(value)
-        return s

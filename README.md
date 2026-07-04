@@ -56,9 +56,11 @@ BrushWatermark\BrushWatermark.exe path\to\image.jpg
 
 ### Sidebar
 
+Lightroom-style panels on the right: section dividers, label-left / value-right sliders with teardrop handles, and neutral gray chrome (`#3B3B3B` panel, `#2A2A2A` canvas surround). See [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui/DESIGN.md) for the full UI spec.
+
 - **Watermark** — text, font, and auto-fit (apply to all strokes)
 - **Layers** — list of strokes; delete or clear all
-- **Controls** — when nothing is selected, these set **tool defaults** for the next stroke; when a layer is selected, they edit **that layer**
+- **Brush** — when nothing is selected, these set **tool defaults** for the next stroke; when a layer is selected, they edit **that layer**
 - **Help** — shortcuts, current version, and link to a newer release if one is available
 
 Click **Save and close** to write the watermarked image (quality 95, same path). **Exit without saving** discards changes to the image.

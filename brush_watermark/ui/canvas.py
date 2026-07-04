@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView
+from brush_watermark.ui.design_tokens import CANVAS_BG, HANDLE
 
 if TYPE_CHECKING:
     pass
@@ -54,7 +55,7 @@ class CanvasWidget(QWidget):
         view = self._get_view()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
-        p.fillRect(self.rect(), QColor("#0f172a"))
+        p.fillRect(self.rect(), QColor(CANVAS_BG))
 
         if self.preview_pixmap is not None:
             p.drawPixmap(int(view.offset_x), int(view.offset_y), self.preview_pixmap)
@@ -91,9 +92,9 @@ class CanvasWidget(QWidget):
         if len(points) < 2:
             return
         guide_alpha = 128
-        guide_color = QColor("#38bdf8")
+        guide_color = QColor(HANDLE)
         guide_color.setAlpha(guide_alpha)
-        self._draw_polyline(p, points, "#38bdf8", 1.0, dashed=True, alpha=guide_alpha)
+        self._draw_polyline(p, points, HANDLE, 1.0, dashed=True, alpha=guide_alpha)
 
         sx, sy = points[0]
         ex, ey = points[-1]
