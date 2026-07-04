@@ -10,7 +10,7 @@ APP_SLUG = "BrushWatermark"
 def app_icon_path() -> Path:
     """Path to the app icon PNG (source tree or PyInstaller bundle)."""
     if getattr(sys, "frozen", False):
-        base = Path(sys._MEIPASS)
+        base = Path(sys._MEIPASS) / "brush_watermark"
     else:
         base = Path(__file__).resolve().parent
     return base / "assets" / "icon.png"
