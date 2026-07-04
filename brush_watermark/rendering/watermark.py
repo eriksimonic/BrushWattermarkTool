@@ -57,18 +57,18 @@ def build_glyph_cache(text: str, font, fill: tuple) -> list[tuple[Image.Image, i
     draw = ImageDraw.Draw(dummy)
     glyphs = []
     for ch in text:
-        bbox = draw.textbbox((0, 0), ch, font=font)
+        bbox = draw.textbbox((0, 0), ch, font=font, anchor="mm")
         glyph_w = max(1, bbox[2] - bbox[0])
         glyph_h = max(1, bbox[3] - bbox[1])
-        advance = max(1, glyph_w)
+        advance = max(1, int(math.ceil(draw.textlength(ch, font=font))))
         pad = max(4, int(glyph_h * 0.25))
-        origin_x = pad - bbox[0]
-        origin_y = pad - bbox[1]
-        glyph = Image.new("RGBA", (glyph_w + pad * 2, glyph_h + pad * 2), (0, 0, 0, 0))
+        canvas_w = glyph_w + pad * 2
+        canvas_h = glyph_h + pad * 2
+        anchor_x = canvas_w / 2.0
+        anchor_y = canvas_h / 2.0
+        glyph = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         gd = ImageDraw.Draw(glyph)
-        gd.text((origin_x, origin_y), ch, font=font, fill=fill)
-        anchor_x = origin_x + glyph_w / 2.0
-        anchor_y = origin_y + glyph_h / 2.0
+        gd.text((anchor_x, anchor_y), ch, font=font, fill=fill, anchor="mm")
         glyphs.append((glyph, advance, anchor_x, anchor_y))
     return glyphs
 
