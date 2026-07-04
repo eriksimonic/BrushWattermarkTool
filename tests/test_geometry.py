@@ -7,6 +7,7 @@ from brush_watermark.geometry.path_text import (
     angle_unwrap,
     averaged_angle,
     blend_angles,
+    centered_baseline_offset,
     glyph_rotation_degrees,
     point_at_distance,
     smooth_path_for_text,
@@ -173,6 +174,11 @@ class TestAngles:
     def test_glyph_rotation_degrees_matches_image_coordinates(self):
         assert glyph_rotation_degrees(0.0) == pytest.approx(0.0)
         assert glyph_rotation_degrees(math.pi / 2, 15) == pytest.approx(-75.0)
+
+    def test_centered_baseline_offset_shifts_down_on_horizontal_path(self):
+        ox, oy = centered_baseline_offset(0.0, 16.0, 4.0)
+        assert ox == pytest.approx(0.0)
+        assert oy == pytest.approx(6.0)
 
     def test_smooth_path_for_text_expands_curved_paths(self):
         points = [(0, 0), (50, 0), (100, 0)]

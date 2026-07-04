@@ -5,6 +5,15 @@ from brush_watermark.rendering.blend import composite_watermark_layer, normalize
 from brush_watermark.rendering.watermark import composite_watermark, make_stroke_watermark_layer
 
 
+def _count_changed_pixels(image, bg, x0, x1, y0, y1, step=5):
+    return sum(
+        1
+        for y in range(y0, y1)
+        for x in range(x0, x1, step)
+        if image.getpixel((x, y)) != bg
+    )
+
+
 class TestNormalizeBlendMode:
     def test_unknown_mode_falls_back(self):
         assert normalize_blend_mode("not-a-mode") == "soft_light"
@@ -29,12 +38,7 @@ class TestBlendModes:
         settings = Settings(watermark_text="TEST", opacity=100, brush_size=40, text_color="white")
         erase_mask = Image.new("L", (200, 200), 0)
         result = composite_watermark(base, [stroke], settings, erase_mask)
-        changed = [
-            result.getpixel((x, 100))
-            for x in range(20, 180, 5)
-            if result.getpixel((x, 100)) != (128, 128, 128)
-        ]
-        assert len(changed) > 0
+        assert _count_changed_pixels(result, (128, 128, 128), 20, 180, 80, 105) > 0
 
     def test_soft_light_differs_from_normal(self):
         base = Image.new("RGB", (200, 200), (96, 120, 144))
@@ -70,8 +74,9 @@ class TestBlendModes:
         ).convert("RGB")
 
         differences = [
-            x
+            (x, y)
+            for y in range(80, 105)
             for x in range(20, 180, 2)
-            if normal.getpixel((x, 100)) != soft.getpixel((x, 100))
+            if normal.getpixel((x, y)) != soft.getpixel((x, y))
         ]
         assert differences

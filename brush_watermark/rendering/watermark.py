@@ -3,6 +3,8 @@ import math
 
 from brush_watermark.geometry.path_text import (
     angle_unwrap,
+    blend_angles,
+    centered_baseline_offset,
     glyph_rotation_degrees,
     point_at_distance,
     smooth_path_for_text,
@@ -19,6 +21,9 @@ from brush_watermark.rendering.fonts import (
     load_font,
 )
 from brush_watermark.rendering.masks import apply_erase_mask, make_stroke_mask
+
+TEXT_BASELINE_ANCHOR = "ms"
+TANGENT_SMOOTHING = 0.35
 
 
 def text_dimensions(text: str, font_name: str, font_size: int) -> tuple[int, int, tuple]:
@@ -62,18 +67,19 @@ def build_glyph_cache(text: str, font, fill: tuple) -> list[tuple[Image.Image, i
     draw = ImageDraw.Draw(dummy)
     glyphs = []
     for ch in text:
-        bbox = draw.textbbox((0, 0), ch, font=font, anchor="mm")
-        glyph_w = max(1, bbox[2] - bbox[0])
-        glyph_h = max(1, bbox[3] - bbox[1])
+        bbox = draw.textbbox((0, 0), ch, font=font, anchor=TEXT_BASELINE_ANCHOR)
+        left, top, right, bottom = bbox
+        glyph_w = max(1, right - left)
+        glyph_h = max(1, bottom - top)
         advance = max(1, int(math.ceil(draw.textlength(ch, font=font))))
         pad = max(4, int(glyph_h * 0.25))
-        canvas_w = glyph_w + pad * 2
-        canvas_h = glyph_h + pad * 2
-        anchor_x = canvas_w / 2.0
-        anchor_y = canvas_h / 2.0
+        canvas_w = int(math.ceil(glyph_w + pad * 2))
+        canvas_h = int(math.ceil(glyph_h + pad * 2))
+        anchor_x = pad - left
+        anchor_y = pad - top
         glyph = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         gd = ImageDraw.Draw(glyph)
-        gd.text((anchor_x, anchor_y), ch, font=font, fill=fill, anchor="mm")
+        gd.text((anchor_x, anchor_y), ch, font=font, fill=fill, anchor=TEXT_BASELINE_ANCHOR)
         glyphs.append((glyph, advance, anchor_x, anchor_y))
     return glyphs
 
@@ -161,11 +167,12 @@ def _draw_glyphs_on_path(
     gap_extra: float,
     angle_offset: int,
     repeat: bool,
+    ascent: float,
+    descent: float,
     repeat_gap: float = 0.0,
     prev_tangent: float | None = None,
 ) -> None:
     avg_advance = sum(g[1] for g in glyphs) / len(glyphs)
-    half_window = tangent_half_window(avg_advance)
     pos = start_d
     while pos < end_d:
         if repeat and pos > start_d and repeat_gap > 0:
@@ -177,17 +184,24 @@ def _draw_glyphs_on_path(
                 return
             center_d = pos + advance / 2.0
             x, y, _ = point_at_distance(points, center_d)
-            tangent = tangent_angle_at_distance(
+            half_window = tangent_half_window(max(advance, avg_advance))
+            raw_tangent = tangent_angle_at_distance(
                 points,
                 center_d,
                 half_window,
                 total_length=length,
             )
             if prev_tangent is not None:
-                tangent = angle_unwrap(prev_tangent, tangent)
+                raw_tangent = angle_unwrap(prev_tangent, raw_tangent)
+                tangent = blend_angles(prev_tangent, raw_tangent, TANGENT_SMOOTHING)
+            else:
+                tangent = raw_tangent
             prev_tangent = tangent
             angle_degrees = glyph_rotation_degrees(tangent, angle_offset)
-            draw_glyph_on_path(layer, glyph, anchor_x, anchor_y, x, y, angle_degrees)
+            ox, oy = centered_baseline_offset(tangent, ascent, descent)
+            draw_glyph_on_path(
+                layer, glyph, anchor_x, anchor_y, x + ox, y + oy, angle_degrees
+            )
             pos += advance + gap_extra
         if not repeat:
             break
@@ -225,6 +239,7 @@ def draw_text_on_path(
     glyphs = build_glyph_cache(text, font, fill)
     if not glyphs:
         return
+    ascent, descent = font.getmetrics()
     base_width = sum(g[1] for g in glyphs)
     start = 0.0
     end = length
@@ -245,6 +260,8 @@ def draw_text_on_path(
         gap_extra,
         stroke.angle_offset,
         repeat=repeat,
+        ascent=float(ascent),
+        descent=float(descent),
         repeat_gap=repeat_gap,
     )
 

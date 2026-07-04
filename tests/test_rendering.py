@@ -1,8 +1,23 @@
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.masks import make_stroke_mask
-from brush_watermark.rendering.watermark import compute_text_span, composite_watermark
+from brush_watermark.rendering.watermark import (
+    TEXT_BASELINE_ANCHOR,
+    build_glyph_cache,
+    compute_text_span,
+    composite_watermark,
+)
+from brush_watermark.rendering.fonts import load_font
+
+
+def _count_changed_pixels(image, bg, x0, x1, y0, y1, step=5):
+    return sum(
+        1
+        for y in range(y0, y1)
+        for x in range(x0, x1, step)
+        if image.getpixel((x, y)) != bg
+    )
 
 
 class TestMakeStrokeMask:
@@ -55,6 +70,19 @@ class TestComputeTextSpan:
         assert stretch.end_d == stretch.used_span
 
 
+class TestGlyphCache:
+    def test_uses_baseline_anchor(self):
+        assert TEXT_BASELINE_ANCHOR == "ms"
+        font = load_font("Arial", 24)
+        glyphs = build_glyph_cache("Si", font, (255, 255, 255, 255))
+        assert len(glyphs) == 2
+        dummy = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(dummy)
+        for ch in "Si":
+            bbox = draw.textbbox((0, 0), ch, font=font, anchor="ms")
+            assert bbox[3] - bbox[1] > 0
+
+
 class TestCompositeWatermark:
     def test_produces_rgb_image(self):
         base = Image.new("RGB", (200, 200), (128, 128, 128))
@@ -86,12 +114,7 @@ class TestCompositeWatermark:
         )
         erase_mask = Image.new("L", (200, 200), 0)
         result = composite_watermark(base, [stroke], settings, erase_mask)
-        changed = [
-            result.getpixel((x, 100))
-            for x in range(20, 180, 5)
-            if result.getpixel((x, 100)) != (128, 128, 128)
-        ]
-        assert len(changed) > 0
+        assert _count_changed_pixels(result, (128, 128, 128), 20, 180, 80, 105) > 0
 
     def test_repeat_text_changes_more_pixels_than_stretch(self):
         base = Image.new("RGB", (400, 200), (128, 128, 128))
@@ -121,12 +144,8 @@ class TestCompositeWatermark:
         erase_mask = Image.new("L", (400, 200), 0)
         stretch = composite_watermark(base, [stretch_stroke], settings, erase_mask)
         repeat = composite_watermark(base, [repeat_stroke], settings, erase_mask)
-        stretch_changed = sum(
-            1 for x in range(20, 380, 3) if stretch.getpixel((x, 100)) != (128, 128, 128)
-        )
-        repeat_changed = sum(
-            1 for x in range(20, 380, 3) if repeat.getpixel((x, 100)) != (128, 128, 128)
-        )
+        stretch_changed = _count_changed_pixels(stretch, (128, 128, 128), 20, 380, 80, 105, 3)
+        repeat_changed = _count_changed_pixels(repeat, (128, 128, 128), 20, 380, 80, 105, 3)
         assert repeat_changed > stretch_changed
 
     def test_repeat_spacing_reduces_tile_count(self):
@@ -158,10 +177,6 @@ class TestCompositeWatermark:
         erase_mask = Image.new("L", (400, 200), 0)
         tight_result = composite_watermark(base, [tight], settings, erase_mask)
         spaced_result = composite_watermark(base, [spaced], settings, erase_mask)
-        tight_changed = sum(
-            1 for x in range(20, 380, 3) if tight_result.getpixel((x, 100)) != (128, 128, 128)
-        )
-        spaced_changed = sum(
-            1 for x in range(20, 380, 3) if spaced_result.getpixel((x, 100)) != (128, 128, 128)
-        )
+        tight_changed = _count_changed_pixels(tight_result, (128, 128, 128), 20, 380, 80, 105, 3)
+        spaced_changed = _count_changed_pixels(spaced_result, (128, 128, 128), 20, 380, 80, 105, 3)
         assert tight_changed > spaced_changed

@@ -102,3 +102,13 @@ def blend_angles(a: float, b: float, amount: float) -> float:
 def glyph_rotation_degrees(tangent_radians: float, angle_offset_degrees: float = 0) -> float:
     """Map path tangent to PIL rotation (image y-axis points down)."""
     return -math.degrees(tangent_radians) + angle_offset_degrees
+
+
+def centered_baseline_offset(
+    tangent_radians: float,
+    ascent: float,
+    descent: float,
+) -> tuple[float, float]:
+    """Virtual baseline path offset so baseline-aligned text centers on the stroke."""
+    offset = (ascent - descent) * 0.5
+    return -math.sin(tangent_radians) * offset, math.cos(tangent_radians) * offset
