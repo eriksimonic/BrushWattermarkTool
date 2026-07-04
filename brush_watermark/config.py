@@ -3,7 +3,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-APP_NAME = "Lightroom Brush Watermark"
+APP_NAME = "Brush Watermark"
+APP_SLUG = "BrushWatermark"
+
+
+def app_icon_path() -> Path:
+    """Path to the app icon PNG (source tree or PyInstaller bundle)."""
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).resolve().parent
+    return base / "assets" / "icon.png"
 GITHUB_REPO = "eriksimonic/BrushWattermarkTool"
 GITHUB_BRANCH = "main"
 VERSION_RAW_URL = (
@@ -30,6 +40,7 @@ DEFAULT_SETTINGS = {
     "repeat_text": False,
     "repeat_spacing": 5,
     "blend_mode": "soft_light",
+    "last_image_dir": "",
 }
 
 
@@ -49,10 +60,20 @@ def load_settings() -> dict:
 def save_settings(settings: dict) -> None:
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        merged = load_settings()
+        merged.update(settings)
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=2, ensure_ascii=False)
+            json.dump(merged, f, indent=2, ensure_ascii=False)
     except OSError:
         pass
+
+
+def last_image_dir() -> str:
+    """Directory to open in the file picker, or empty string for the default."""
+    saved = load_settings().get("last_image_dir", "")
+    if saved and Path(saved).is_dir():
+        return saved
+    return ""
 
 
 def reveal_in_explorer(path: Path) -> None:
