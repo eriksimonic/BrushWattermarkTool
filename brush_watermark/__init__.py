@@ -1,3 +1,3 @@
 """Brush Watermark — paint watermarks along brush strokes on JPG images."""
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
