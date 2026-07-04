@@ -1,6 +1,5 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -18,7 +17,7 @@ from brush_watermark.rendering.fonts import font_candidates
 from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
-from brush_watermark.ui.lightroom_controls import SectionHeader, SliderRow
+from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, SliderRow
 
 
 class SidebarPanel(QWidget):
@@ -55,39 +54,18 @@ class SidebarPanel(QWidget):
         self.font_combo = QComboBox()
         self.font_combo.addItems(list(font_candidates().keys()))
         self.font_combo.setCurrentText(settings.font_name)
-        self.auto_fit_check = QCheckBox("Auto fit text to stroke")
+        self.auto_fit_check = BoxCheckBox("Auto fit text to stroke")
         self.auto_fit_check.setChecked(settings.auto_fit_text)
 
         self._add_form_row(watermark_layout, "Text", self.watermark_text_edit)
         self._add_form_row(watermark_layout, "Font", self.font_combo)
         watermark_layout.addWidget(self.auto_fit_check)
 
-        layout.addWidget(SectionHeader("Layers"))
-        layers_layout = QVBoxLayout()
-        layers_layout.setSpacing(4)
-        layout.addLayout(layers_layout)
-
-        self.stroke_list = QListWidget()
-        self.stroke_list.setFixedHeight(80)
-        self.stroke_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        layers_layout.addWidget(self.stroke_list)
-
-        layer_actions = QHBoxLayout()
-        layer_actions.setSpacing(6)
-        self.delete_selected_btn = QPushButton("Delete")
-        self.delete_all_btn = QPushButton("Clear all")
-        layer_actions.addWidget(self.delete_selected_btn)
-        layer_actions.addWidget(self.delete_all_btn)
-        layers_layout.addLayout(layer_actions)
-
-        layout.addWidget(SectionHeader("Brush"))
+        self.brush_section = SectionHeader("Brush")
+        layout.addWidget(self.brush_section)
         controls_layout = QVBoxLayout()
         controls_layout.setSpacing(3)
         layout.addLayout(controls_layout)
-
-        self.context_label = QLabel("Tool defaults")
-        self.context_label.setObjectName("HintLabel")
-        controls_layout.addWidget(self.context_label)
 
         self.color_picker = ColorSwatchPicker()
         self.color_picker.set_swatches(self._swatch_colors, settings.text_color)
@@ -102,7 +80,7 @@ class SidebarPanel(QWidget):
         self.font_size_value_label = QLabel()
         self.font_size_value_label.setObjectName("HintLabel")
         self.softness_row = SliderRow("Softness", 0, 20, settings.mask_softness)
-        self.repeat_text_check = QCheckBox("Repeat text along stroke")
+        self.repeat_text_check = BoxCheckBox("Repeat text along stroke")
         self.repeat_text_check.setChecked(settings.repeat_text)
         self.repeat_spacing_spin = QSpinBox()
         self.repeat_spacing_spin.setRange(0, 50)
@@ -122,9 +100,27 @@ class SidebarPanel(QWidget):
         controls_layout.addWidget(self.softness_row)
         controls_layout.addLayout(repeat_row)
 
+        layout.addWidget(SectionHeader("Layers"))
+        layers_layout = QVBoxLayout()
+        layers_layout.setSpacing(4)
+        layout.addLayout(layers_layout)
+
+        self.stroke_list = QListWidget()
+        self.stroke_list.setFixedHeight(110)
+        self.stroke_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        layers_layout.addWidget(self.stroke_list)
+
+        layer_actions = QHBoxLayout()
+        layer_actions.setSpacing(6)
+        self.delete_selected_btn = QPushButton("Delete")
+        self.delete_all_btn = QPushButton("Clear all")
+        layer_actions.addWidget(self.delete_selected_btn)
+        layer_actions.addWidget(self.delete_all_btn)
+        layers_layout.addLayout(layer_actions)
+
         actions = QVBoxLayout()
         actions.setSpacing(4)
-        self.reveal_in_explorer_check = QCheckBox("Show in Explorer after save")
+        self.reveal_in_explorer_check = BoxCheckBox("Show in Explorer after save")
         self.reveal_in_explorer_check.setChecked(True)
         actions.addWidget(self.reveal_in_explorer_check)
         self.ok_button = QPushButton("Save and close")
@@ -203,8 +199,14 @@ class SidebarPanel(QWidget):
     def _update_repeat_spacing_enabled(self):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())
 
-    def set_context_label(self, text: str):
-        self.context_label.setText(text)
+    def set_brush_context(self, *, layer_name: str | None = None, visible: bool = True):
+        if layer_name is None:
+            self.brush_section.set_title("Brush")
+            return
+        title = f"Layer · {layer_name}"
+        if not visible:
+            title += " · hidden"
+        self.brush_section.set_title(title)
 
     def _block_control_signals(self, block: bool):
         widgets = (
@@ -232,7 +234,7 @@ class SidebarPanel(QWidget):
             self.blend_combo.setCurrentIndex(blend_index)
         self._block_control_signals(False)
         self._update_repeat_spacing_enabled()
-        self.set_context_label("Tool defaults")
+        self.set_brush_context()
 
     def load_stroke_controls(self, stroke: Stroke):
         self._block_control_signals(True)
@@ -247,8 +249,7 @@ class SidebarPanel(QWidget):
             self.blend_combo.setCurrentIndex(blend_index)
         self._block_control_signals(False)
         self._update_repeat_spacing_enabled()
-        visibility = "visible" if stroke.visible else "hidden"
-        self.set_context_label(f"Layer: {stroke.name} · {visibility}")
+        self.set_brush_context(layer_name=stroke.name, visible=stroke.visible)
 
     def read_document_settings(self, tool_defaults: Settings) -> Settings:
         return Settings(

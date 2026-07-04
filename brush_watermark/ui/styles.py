@@ -174,13 +174,9 @@ def app_stylesheet() -> str:
     QCheckBox::indicator {{
         width: 14px;
         height: 14px;
-        border: 1px solid {BORDER};
-        border-radius: 2px;
-        background: {INPUT};
-    }}
-    QCheckBox::indicator:checked {{
-        background: {HANDLE};
-        border-color: {SELECTION_BORDER};
+        border: none;
+        background: transparent;
+        image: none;
     }}
     QSlider::groove:horizontal {{
         border: 0;

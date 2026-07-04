@@ -1,8 +1,18 @@
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QRect, QRectF
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QSlider,
+    QStyle,
+    QStyleOptionButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from brush_watermark.ui.design_tokens import SLIDER_HANDLE, TRACK
+from brush_watermark.ui.design_tokens import BORDER, HANDLE, SLIDER_HANDLE, TRACK
 
 
 class SectionHeader(QWidget):
@@ -19,6 +29,7 @@ class SectionHeader(QWidget):
         label = QLabel(title)
         label.setObjectName("SectionHeader")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_label = label
 
         right = QFrame()
         right.setFrameShape(QFrame.Shape.HLine)
@@ -27,6 +38,62 @@ class SectionHeader(QWidget):
         row.addWidget(left, 1)
         row.addWidget(label)
         row.addWidget(right, 1)
+
+    def set_title(self, title: str):
+        self._title_label.setText(title)
+
+
+class BoxCheckBox(QCheckBox):
+    """Checkbox with a hollow outer box; checked adds a padded inner fill."""
+
+    INDICATOR_SIZE = 14
+    BORDER = 1
+    GAP = 3
+    RADIUS = 2
+
+    def paintEvent(self, _event):
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+
+            style = self.style()
+            indicator = style.subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, opt, self)
+            contents = style.subElementRect(QStyle.SubElement.SE_CheckBoxContents, opt, self)
+
+            ix = int(indicator.x() + (indicator.width() - self.INDICATOR_SIZE) / 2)
+            iy = int(indicator.y() + (indicator.height() - self.INDICATOR_SIZE) / 2)
+            inner_offset = self.BORDER + self.GAP
+            inner_size = self.INDICATOR_SIZE - 2 * inner_offset
+
+            border = QColor(BORDER)
+            if not self.isEnabled():
+                border.setAlpha(128)
+
+            painter.setPen(QPen(border, self.BORDER))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                QRectF(ix + 0.5, iy + 0.5, self.INDICATOR_SIZE - 1, self.INDICATOR_SIZE - 1),
+                self.RADIUS,
+                self.RADIUS,
+            )
+
+            if self.isChecked():
+                fill = QColor(HANDLE)
+                if not self.isEnabled():
+                    fill.setAlpha(128)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(fill)
+                painter.drawRect(
+                    QRect(ix + inner_offset, iy + inner_offset, inner_size, inner_size)
+                )
+
+            label_opt = QStyleOptionButton(opt)
+            label_opt.rect = contents
+            style.drawControl(QStyle.ControlElement.CE_CheckBoxLabel, label_opt, painter, self)
+        finally:
+            painter.end()
 
 
 class LightroomSlider(QSlider):
