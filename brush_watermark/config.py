@@ -87,6 +87,20 @@ def last_image_dir() -> str:
     return ""
 
 
+def open_stamps_folder() -> Path:
+    """Open the bundled stamps folder in the system file manager."""
+    folder = stamps_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    resolved = folder.resolve()
+    if sys.platform == "win32":
+        subprocess.Popen(["explorer", str(resolved)])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(resolved)])
+    else:
+        subprocess.Popen(["xdg-open", str(resolved)])
+    return resolved
+
+
 def reveal_in_explorer(path: Path) -> None:
     resolved = path.resolve()
     if sys.platform == "win32":

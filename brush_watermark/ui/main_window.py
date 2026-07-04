@@ -5,12 +5,12 @@ from typing import Optional
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl, QFileSystemWatcher, QEvent
 from PySide6.QtGui import QDesktopServices, QKeyEvent, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QSizePolicy, QWidget
 
 from brush_watermark import __version__
-from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
+from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings, stamps_dir
 from brush_watermark.geometry.points import clamp, dist
 from brush_watermark.models import CanvasView, Settings, ToolMode
 from brush_watermark.rendering.colors import build_swatch_palette
@@ -62,6 +62,10 @@ class MainWindow(QMainWindow):
         self._update_result: UpdateCheckResult | None = None
         self.left_press_stamp_candidate = -1
         self.left_press_on_selected_stamp = False
+        self._stamp_reload_timer = QTimer(self)
+        self._stamp_reload_timer.setSingleShot(True)
+        self._stamp_reload_timer.setInterval(250)
+        self._stamp_reload_timer.timeout.connect(self._reload_stamps_from_disk)
 
         self.setWindowTitle(f"{APP_NAME} - {self.doc.image_path.name}")
         self.resize(1560, 980)
@@ -109,11 +113,28 @@ class MainWindow(QMainWindow):
         self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors)
         self.sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
         self.sidebar_scroll.setWidget(self.sidebar)
+        self._setup_stamp_watcher()
+
+    def _setup_stamp_watcher(self):
+        folder = stamps_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        self._stamp_watcher = QFileSystemWatcher(self)
+        folder_path = str(folder.resolve())
+        self._stamp_watcher.addPath(folder_path)
+        self._stamp_watcher.directoryChanged.connect(self._schedule_stamp_reload)
+
+    def _schedule_stamp_reload(self, _path: str = ""):
+        self._stamp_reload_timer.start()
+
+    def _reload_stamps_from_disk(self):
+        preferred = self.sidebar.stamp_combo.currentText() or self.doc.settings.stamp_name
+        self.sidebar.reload_stamps(preferred)
 
     def _connect_signals(self):
         self.sidebar.document_settings_changed.connect(self.document_settings_changed)
         self.sidebar.stroke_controls_changed.connect(self.stroke_controls_changed)
         self.sidebar.tool_mode_changed.connect(self.on_tool_mode_changed)
+        self.sidebar.stamps_changed.connect(self.on_stamps_changed)
         self.sidebar.layer_selected.connect(self.on_layer_selected)
         self.sidebar.layer_item_pressed.connect(self.on_layer_item_pressed)
         self.sidebar.layer_item_clicked.connect(self.on_layer_item_clicked)
@@ -298,6 +319,17 @@ class MainWindow(QMainWindow):
         self.canvas.update()
         self.schedule_preview()
 
+    def on_stamps_changed(self):
+        self.doc.settings.stamp_name = self.sidebar.stamp_combo.currentText()
+        save_settings(self.doc.settings.to_dict())
+        self.sidebar.set_controls_context(
+            tool_mode=self.sidebar.current_tool_mode(),
+            stamp_selected=self._stamp_selected(),
+        )
+        self.update_labels()
+        self.canvas.update()
+        self.schedule_preview()
+
     def sync_list_selection(self):
         self._ignore_list_selection = True
         self.sidebar.stroke_list.blockSignals(True)
@@ -443,6 +475,11 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.schedule_preview(1)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowActivate:
+            self._schedule_stamp_reload()
 
     def start_left_interaction(self, canvas_x: float, canvas_y: float):
         if not self.inside_image_canvas(canvas_x, canvas_y):

@@ -20,6 +20,12 @@ def list_stamp_svgs() -> list[str]:
     return sorted(path.name for path in directory.glob("*.svg") if path.is_file())
 
 
+def reload_stamp_catalog() -> list[str]:
+    """Rescan the stamps folder and clear cached SVG dimensions."""
+    stamp_pixel_size.cache_clear()
+    return list_stamp_svgs()
+
+
 def stamp_svg_path(svg_name: str) -> Path:
     return stamps_dir() / svg_name
 

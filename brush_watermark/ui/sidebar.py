@@ -12,10 +12,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from brush_watermark.config import open_stamps_folder
 from brush_watermark.models import Settings, Stamp, Stroke, ToolMode
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
-from brush_watermark.services.stamps import list_stamp_svgs
+from brush_watermark.services.stamps import list_stamp_svgs, reload_stamp_catalog
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
 from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, SliderRow
@@ -25,6 +26,7 @@ class SidebarPanel(QWidget):
     document_settings_changed = Signal()
     stroke_controls_changed = Signal()
     tool_mode_changed = Signal(str)
+    stamps_changed = Signal()
     layer_selected = Signal(int)
     layer_item_pressed = Signal(int)
     layer_item_clicked = Signal(int)
@@ -73,14 +75,23 @@ class SidebarPanel(QWidget):
 
         self.stamp_combo = QComboBox()
         self.stamp_combo.setToolTip("SVG stamp to place on the canvas")
-        self.stamp_empty_label = QLabel("Add .svg files to assets/stamps/")
+        self.open_stamps_folder_btn = QPushButton("Open")
+        self.open_stamps_folder_btn.setFixedWidth(52)
+        self.open_stamps_folder_btn.setToolTip("Open stamps folder and reload SVG list")
+        stamp_picker = QWidget()
+        stamp_picker_layout = QHBoxLayout(stamp_picker)
+        stamp_picker_layout.setContentsMargins(0, 0, 0, 0)
+        stamp_picker_layout.setSpacing(6)
+        stamp_picker_layout.addWidget(self.stamp_combo, 1)
+        stamp_picker_layout.addWidget(self.open_stamps_folder_btn)
+        self.stamp_empty_label = QLabel("Add .svg files to the stamps folder, then click Open to reload.")
         self.stamp_empty_label.setObjectName("HintLabel")
         self.stamp_empty_label.setWordWrap(True)
 
         self._add_form_row(watermark_layout, "Text", self.watermark_text_edit, row_attr="text_form_row")
         self._add_form_row(watermark_layout, "Font", self.font_combo, row_attr="font_form_row")
         watermark_layout.addWidget(self.auto_fit_check)
-        self._add_form_row(watermark_layout, "Stamp", self.stamp_combo, row_attr="stamp_form_row")
+        self._add_form_row(watermark_layout, "Stamp", stamp_picker, row_attr="stamp_form_row")
         watermark_layout.addWidget(self.stamp_empty_label)
 
         self.use_svg_colors_check = BoxCheckBox("Use SVG colors")
@@ -192,7 +203,14 @@ class SidebarPanel(QWidget):
         self.refresh_stamp_list(settings.stamp_name)
         self.set_tool_mode(settings.tool_mode)
 
-    def refresh_stamp_list(self, preferred: str = ""):
+    def reload_stamps(self, preferred: str = "") -> bool:
+        reload_stamp_catalog()
+        selection = preferred or self.stamp_combo.currentText()
+        has_stamps = self.refresh_stamp_list(selection, auto_fix_tool_mode=True)
+        self.stamps_changed.emit()
+        return has_stamps
+
+    def refresh_stamp_list(self, preferred: str = "", *, auto_fix_tool_mode: bool = False) -> bool:
         names = list_stamp_svgs()
         self.stamp_combo.blockSignals(True)
         self.stamp_combo.clear()
@@ -206,6 +224,11 @@ class SidebarPanel(QWidget):
         self.stamp_combo.setEnabled(has_stamps)
         self.stamp_empty_label.setVisible(not has_stamps)
         self.stamp_tool_btn.setEnabled(has_stamps)
+        if auto_fix_tool_mode and not has_stamps and self.stamp_tool_btn.isChecked():
+            self.paint_tool_btn.setChecked(True)
+            self.stamp_tool_btn.setChecked(False)
+            self.tool_mode_changed.emit("paint")
+        return has_stamps
 
     def set_tool_mode(self, mode: ToolMode):
         paint = mode == "paint"
@@ -263,6 +286,7 @@ class SidebarPanel(QWidget):
         self.use_svg_colors_check.toggled.connect(emit_controls)
         self.paint_tool_btn.clicked.connect(self._on_paint_tool_clicked)
         self.stamp_tool_btn.clicked.connect(self._on_stamp_tool_clicked)
+        self.open_stamps_folder_btn.clicked.connect(self._on_open_stamps_folder)
 
         self.color_picker.color_changed.connect(emit_controls)
         self.blend_combo.currentIndexChanged.connect(emit_controls)
@@ -300,6 +324,10 @@ class SidebarPanel(QWidget):
             return
         self.paint_tool_btn.setChecked(False)
         self.tool_mode_changed.emit("stamp")
+
+    def _on_open_stamps_folder(self):
+        open_stamps_folder()
+        self.reload_stamps()
 
     def _update_repeat_spacing_enabled(self):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())

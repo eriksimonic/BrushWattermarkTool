@@ -1,6 +1,6 @@
 from brush_watermark.models import Settings, Stamp
 from brush_watermark.services.document import Document
-from brush_watermark.services.stamps import list_stamp_svgs, stamp_hit_test, render_stamp_rgba, stamp_bounds, stamp_pixel_size
+from brush_watermark.services.stamps import list_stamp_svgs, stamp_hit_test, render_stamp_rgba, stamp_bounds, stamp_pixel_size, reload_stamp_catalog
 
 
 class TestStampAssets:
@@ -8,6 +8,12 @@ class TestStampAssets:
         names = list_stamp_svgs()
         assert "sample-star.svg" in names
         assert "sample-badge.svg" in names
+
+    def test_reload_stamp_catalog(self):
+        first = reload_stamp_catalog()
+        second = reload_stamp_catalog()
+        assert first == second
+        assert "sample-star.svg" in second
 
     def test_render_stamp_rgba(self):
         image = render_stamp_rgba("sample-star.svg", 80, None)
