@@ -16,7 +16,7 @@ from brush_watermark.models import Settings, Stamp, Stroke
 from brush_watermark.rendering.blend import blend_mode_short
 from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_preview_image
-from brush_watermark.services.stamps import list_stamp_svgs, stamp_bounds, stamp_hit_test
+from brush_watermark.services.stamps import list_stamps, stamp_bounds, stamp_hit_test, normalize_stamp_size_percent
 
 
 class Document:
@@ -120,7 +120,7 @@ class Document:
         color = color_short(stamp.tint_color) if stamp.tint_color else "svg"
         return (
             f"{eye}  {stamp.name}  |  {stamp.svg_name}  |  "
-            f"h{stamp.size}  |  s{stamp.opacity}%  |  "
+            f"{stamp.size}%  |  s{stamp.opacity}%  |  "
             f"{blend_mode_short(stamp.blend_mode)}  |  #{color}"
         )
 
@@ -179,7 +179,7 @@ class Document:
                     svg_name=stamp.svg_name,
                     x=int(round(stamp.x * scale_factor)),
                     y=int(round(stamp.y * scale_factor)),
-                    size=max(1, int(round(stamp.size * scale_factor))),
+                    size=stamp.size,
                     opacity=stamp.opacity,
                     blend_mode=stamp.blend_mode,
                     tint_color=stamp.tint_color,
@@ -253,9 +253,11 @@ class Document:
             stamp = self.stamps[idx]
             if not stamp.visible:
                 continue
-            if not stamp_hit_test(stamp, img_x, img_y, extra_tol):
+            if not stamp_hit_test(stamp, img_x, img_y, self.full_h, extra_tol):
                 continue
-            left, top, right, bottom = stamp_bounds(stamp.svg_name, stamp.x, stamp.y, stamp.size)
+            left, top, right, bottom = stamp_bounds(
+                stamp.svg_name, stamp.x, stamp.y, stamp.size, self.full_h
+            )
             area = (right - left) * (bottom - top)
             if best_area is None or area <= best_area:
                 best_area = area
@@ -268,7 +270,7 @@ class Document:
         stamp = self.stamps[index]
         if not stamp.visible:
             return False
-        return stamp_hit_test(stamp, img_x, img_y, extra_tol)
+        return stamp_hit_test(stamp, img_x, img_y, self.full_h, extra_tol)
 
     def add_stamp(
         self,
@@ -286,7 +288,7 @@ class Document:
             svg_name=svg_name,
             x=x,
             y=y,
-            size=size,
+            size=normalize_stamp_size_percent(size),
             opacity=opacity,
             blend_mode=blend_mode,
             tint_color=tint_color,
@@ -311,7 +313,7 @@ class Document:
     ) -> None:
         if 0 <= self.selected_stamp_index < len(self.stamps):
             stamp = self.stamps[self.selected_stamp_index]
-            stamp.size = size
+            stamp.size = normalize_stamp_size_percent(size)
             stamp.opacity = opacity
             stamp.blend_mode = blend_mode
             stamp.tint_color = tint_color
@@ -400,7 +402,7 @@ class Document:
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
 
     def default_stamp_name(self) -> str:
-        names = list_stamp_svgs()
+        names = list_stamps()
         if self.settings.stamp_name in names:
             return self.settings.stamp_name
         return names[0] if names else ""

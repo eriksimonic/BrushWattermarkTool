@@ -25,13 +25,15 @@ class Settings:
     blend_mode: str = DEFAULT_BLEND_MODE
     tool_mode: ToolMode = "paint"
     stamp_name: str = ""
-    stamp_size: int = 120
+    stamp_size: int = 12
     use_svg_colors: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "Settings":
         from brush_watermark.rendering.blend import normalize_blend_mode
         from brush_watermark.rendering.colors import normalize_text_color
+
+        from brush_watermark.services.stamps import normalize_stamp_size_percent
 
         return cls(
             watermark_text=str(data.get("watermark_text", cls.watermark_text)),
@@ -47,7 +49,10 @@ class Settings:
             blend_mode=normalize_blend_mode(data.get("blend_mode"), cls.blend_mode),
             tool_mode=_normalize_tool_mode(data.get("tool_mode"), cls.tool_mode),
             stamp_name=str(data.get("stamp_name", cls.stamp_name)),
-            stamp_size=int(data.get("stamp_size", cls.stamp_size)),
+            stamp_size=normalize_stamp_size_percent(
+                int(data.get("stamp_size", cls.stamp_size)),
+                legacy_pixels=True,
+            ),
             use_svg_colors=bool(data.get("use_svg_colors", cls.use_svg_colors)),
         )
 
@@ -99,7 +104,7 @@ class Stamp:
     svg_name: str
     x: int
     y: int
-    size: int
+    size: int  # percent of image height (1-300)
     opacity: int
     blend_mode: str = DEFAULT_BLEND_MODE
     tint_color: str | None = None
@@ -134,7 +139,8 @@ class CanvasView:
     offset_y: float
     last_pointer: Optional[tuple[float, float]] = None
     brush_size: int = 120
-    stamp_size: int = 120
+    stamp_size: int = 12
+    image_height: int = 1
     selected_stamp_svg: str = ""
     stamp_preview_svg: str = ""
     dragging_stamp: bool = False

@@ -4,7 +4,7 @@ from brush_watermark.geometry.points import clamp
 from brush_watermark.models import Settings, Stamp
 from brush_watermark.rendering.blend import composite_rgba_layer, normalize_blend_mode
 from brush_watermark.rendering.masks import apply_erase_mask
-from brush_watermark.services.stamps import render_stamp_rgba
+from brush_watermark.services.stamps import render_stamp_rgba, stamp_height_px
 
 
 def make_stamp_layer(
@@ -16,7 +16,7 @@ def make_stamp_layer(
     scale_factor: float = 1.0,
 ) -> Image.Image:
     layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    stamp_height = max(1, int(round(stamp.size)))
+    stamp_height = stamp_height_px(stamp.size, height)
     stamp_image = render_stamp_rgba(stamp.svg_name, stamp_height, stamp.tint_color)
     if stamp_image.getbbox() is None:
         return layer

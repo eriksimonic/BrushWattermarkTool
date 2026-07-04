@@ -16,7 +16,12 @@ from brush_watermark.config import open_stamps_folder
 from brush_watermark.models import Settings, Stamp, Stroke, ToolMode
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
-from brush_watermark.services.stamps import list_stamp_svgs, reload_stamp_catalog
+from brush_watermark.services.stamps import (
+    STAMP_SIZE_MAX_PERCENT,
+    STAMP_SIZE_MIN_PERCENT,
+    list_stamps,
+    reload_stamp_catalog,
+)
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
 from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, SliderRow
@@ -74,17 +79,18 @@ class SidebarPanel(QWidget):
         self.auto_fit_check.setChecked(settings.auto_fit_text)
 
         self.stamp_combo = QComboBox()
-        self.stamp_combo.setToolTip("SVG stamp to place on the canvas")
-        self.open_stamps_folder_btn = QPushButton("Open")
-        self.open_stamps_folder_btn.setFixedWidth(52)
-        self.open_stamps_folder_btn.setToolTip("Open stamps folder and reload SVG list")
+        self.stamp_combo.setToolTip("SVG or PNG stamp to place on the canvas")
+        self.open_stamps_folder_btn = QPushButton("...")
+        self.open_stamps_folder_btn.setObjectName("PathBrowseButton")
+        self.open_stamps_folder_btn.setFixedSize(28, 28)
+        self.open_stamps_folder_btn.setToolTip("Open stamps folder and reload stamp list")
         stamp_picker = QWidget()
         stamp_picker_layout = QHBoxLayout(stamp_picker)
         stamp_picker_layout.setContentsMargins(0, 0, 0, 0)
         stamp_picker_layout.setSpacing(6)
         stamp_picker_layout.addWidget(self.stamp_combo, 1)
         stamp_picker_layout.addWidget(self.open_stamps_folder_btn)
-        self.stamp_empty_label = QLabel("Add .svg files to the stamps folder, then click Open to reload.")
+        self.stamp_empty_label = QLabel("Add .svg or .png files to the stamps folder, then use … to reload.")
         self.stamp_empty_label.setObjectName("HintLabel")
         self.stamp_empty_label.setWordWrap(True)
 
@@ -94,7 +100,7 @@ class SidebarPanel(QWidget):
         self._add_form_row(watermark_layout, "Stamp", stamp_picker, row_attr="stamp_form_row")
         watermark_layout.addWidget(self.stamp_empty_label)
 
-        self.use_svg_colors_check = BoxCheckBox("Use SVG colors")
+        self.use_svg_colors_check = BoxCheckBox("Use original colors")
         self.use_svg_colors_check.setChecked(settings.use_svg_colors)
         watermark_layout.addWidget(self.use_svg_colors_check)
 
@@ -211,7 +217,7 @@ class SidebarPanel(QWidget):
         return has_stamps
 
     def refresh_stamp_list(self, preferred: str = "", *, auto_fix_tool_mode: bool = False) -> bool:
-        names = list_stamp_svgs()
+        names = list_stamps()
         self.stamp_combo.blockSignals(True)
         self.stamp_combo.clear()
         self.stamp_combo.addItems(names)
@@ -259,8 +265,12 @@ class SidebarPanel(QWidget):
 
         if show_stamp_controls:
             self.brush_row.set_label("Stamp size")
+            if self.brush_row.slider.maximum() != STAMP_SIZE_MAX_PERCENT:
+                self.brush_row.slider.setRange(STAMP_SIZE_MIN_PERCENT, STAMP_SIZE_MAX_PERCENT)
         else:
             self.brush_row.set_label("Brush size")
+            if self.brush_row.slider.maximum() != 600:
+                self.brush_row.slider.setRange(5, 600)
         self._refresh_layout()
 
     def set_controls_context(self, *, tool_mode: ToolMode, stamp_selected: bool):
@@ -358,7 +368,12 @@ class SidebarPanel(QWidget):
 
     def load_tool_defaults(self, settings: Settings):
         self._block_control_signals(True)
-        self.brush_row.slider.setValue(settings.brush_size if settings.tool_mode == "paint" else settings.stamp_size)
+        if settings.tool_mode == "paint":
+            self.brush_row.slider.setRange(5, 600)
+            self.brush_row.slider.setValue(settings.brush_size)
+        else:
+            self.brush_row.slider.setRange(STAMP_SIZE_MIN_PERCENT, STAMP_SIZE_MAX_PERCENT)
+            self.brush_row.slider.setValue(settings.stamp_size)
         self.opacity_row.slider.setValue(settings.opacity)
         self.softness_row.slider.setValue(settings.mask_softness)
         self.repeat_text_check.setChecked(settings.repeat_text)
@@ -377,6 +392,7 @@ class SidebarPanel(QWidget):
 
     def load_stroke_controls(self, stroke: Stroke):
         self._block_control_signals(True)
+        self.brush_row.slider.setRange(5, 600)
         self.brush_row.slider.setValue(stroke.brush_size)
         self.opacity_row.slider.setValue(stroke.opacity)
         self.softness_row.slider.setValue(stroke.mask_softness)
@@ -393,6 +409,7 @@ class SidebarPanel(QWidget):
 
     def load_stamp_controls(self, stamp: Stamp):
         self._block_control_signals(True)
+        self.brush_row.slider.setRange(STAMP_SIZE_MIN_PERCENT, STAMP_SIZE_MAX_PERCENT)
         self.brush_row.slider.setValue(stamp.size)
         self.opacity_row.slider.setValue(stamp.opacity)
         self.color_picker.set_selected(stamp.tint_color or self.color_picker.selected_color())

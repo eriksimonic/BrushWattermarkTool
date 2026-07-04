@@ -15,7 +15,7 @@ from brush_watermark.config import (
     save_settings,
 )
 from brush_watermark.models import Settings
-from brush_watermark.services.stamps import list_stamp_svgs
+from brush_watermark.services.stamps import list_stamps
 
 
 def select_jpg_file() -> Optional[Path]:
@@ -68,7 +68,7 @@ def main() -> int:
         from brush_watermark.ui.main_window import MainWindow
 
         settings = Settings.from_dict(load_settings())
-        if settings.tool_mode == "stamp" and not list_stamp_svgs():
+        if settings.tool_mode == "stamp" and not list_stamps():
             settings.tool_mode = "paint"
         window = MainWindow(image_path, settings)
         window.show()

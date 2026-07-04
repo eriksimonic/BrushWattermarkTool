@@ -15,7 +15,7 @@ from brush_watermark.geometry.points import clamp, dist
 from brush_watermark.models import CanvasView, Settings, ToolMode
 from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
-from brush_watermark.services.stamps import list_stamp_svgs, render_stamp_rgba, stamp_bounds
+from brush_watermark.services.stamps import STAMP_SIZE_MAX_PERCENT, STAMP_SIZE_MIN_PERCENT, list_stamps, render_stamp_rgba, stamp_bounds, stamp_height_px
 from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.document import Document
 from brush_watermark.services.update_check import UpdateCheckResult
@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
             last_pointer=self.last_pointer,
             brush_size=self.sidebar.brush_row.slider.value(),
             stamp_size=self.sidebar.brush_row.slider.value(),
+            image_height=self.doc.full_h,
             selected_stamp_svg=selected_stamp.svg_name if selected_stamp else "",
             stamp_preview_svg=stamp_preview,
             dragging_stamp=self.is_moving_stamp,
@@ -267,9 +268,12 @@ class MainWindow(QMainWindow):
         if self._stamp_selected() or tool_mode == "stamp":
             controls = sb.read_stamp_controls()
             size = controls["size"]
+            height_px = stamp_height_px(size, self.doc.full_h)
             sb.set_slider_value(sb.opacity_row, f"{controls['opacity']}%")
-            sb.set_slider_value(sb.brush_row, f"{size} px")
-            sb.font_size_value_label.setText(f"Stamp height {size} px")
+            sb.set_slider_value(sb.brush_row, f"{size}%")
+            sb.font_size_value_label.setText(
+                f"Stamp height {height_px} px ({size}% of image)"
+            )
         else:
             controls = sb.read_stroke_controls()
             brush = controls["brush_size"]
@@ -411,7 +415,10 @@ class MainWindow(QMainWindow):
     def handle_wheel(self, step: int, alt: bool):
         sb = self.sidebar
         if alt:
-            value = clamp(sb.brush_row.slider.value() + step * 12, 5, 600)
+            if sb.current_tool_mode() == "stamp" or self._stamp_selected():
+                value = clamp(sb.brush_row.slider.value() + step, STAMP_SIZE_MIN_PERCENT, STAMP_SIZE_MAX_PERCENT)
+            else:
+                value = clamp(sb.brush_row.slider.value() + step * 12, 5, 600)
             sb.brush_row.slider.setValue(int(value))
         else:
             value = clamp(sb.opacity_row.slider.value() + step * 2, 1, 100)
@@ -565,7 +572,7 @@ class MainWindow(QMainWindow):
                 self.select_stamp_by_index(self.left_press_stamp_candidate, refresh_preview=False)
             else:
                 svg_name = self.sidebar.stamp_combo.currentText()
-                if svg_name and svg_name in list_stamp_svgs():
+                if svg_name and svg_name in list_stamps():
                     controls = self.sidebar.read_stamp_controls()
                     self.doc.add_stamp(
                         svg_name,

@@ -146,6 +146,14 @@ def app_stylesheet() -> str:
         background: {BUTTON_HOVER};
         border-color: {SELECTION_BORDER};
     }}
+    QPushButton#PathBrowseButton {{
+        padding: 0;
+        min-width: 28px;
+        max-width: 28px;
+        min-height: 28px;
+        max-height: 28px;
+        font-weight: 600;
+    }}
     QScrollArea {{
         border: none;
         background: {PANEL};

@@ -19,7 +19,7 @@ def app_icon_path() -> Path:
 
 
 def stamps_dir() -> Path:
-    """Directory containing bundled SVG stamp files."""
+    """Directory containing bundled SVG and PNG stamp files."""
     return _bundle_base() / "assets" / "stamps"
 GITHUB_REPO = "eriksimonic/BrushWattermarkTool"
 GITHUB_BRANCH = "main"
@@ -49,7 +49,7 @@ DEFAULT_SETTINGS = {
     "blend_mode": "soft_light",
     "tool_mode": "paint",
     "stamp_name": "",
-    "stamp_size": 120,
+    "stamp_size": 12,
     "use_svg_colors": True,
     "last_image_dir": "",
 }

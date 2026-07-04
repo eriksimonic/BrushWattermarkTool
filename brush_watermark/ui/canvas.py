@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView
-from brush_watermark.services.stamps import render_stamp_rgba, stamp_bounds
+from brush_watermark.services.stamps import render_stamp_rgba, stamp_bounds, stamp_height_px
 from brush_watermark.ui.design_tokens import CANVAS_BG, HANDLE
 
 if TYPE_CHECKING:
@@ -110,8 +110,10 @@ class CanvasWidget(QWidget):
         p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         p.drawText(QPointF(scx + 6, scy - 8), label)
 
-    def _draw_stamp_selection_guide(self, p: QPainter, stamp, label: str):
-        left, top, right, bottom = stamp_bounds(stamp.svg_name, stamp.x, stamp.y, stamp.size)
+    def _draw_stamp_selection_guide(self, p: QPainter, stamp, label: str, image_height: int):
+        left, top, right, bottom = stamp_bounds(
+            stamp.svg_name, stamp.x, stamp.y, stamp.size, image_height
+        )
         x0, y0 = self._image_to_canvas(left, top)
         x1, y1 = self._image_to_canvas(right, bottom)
         guide_color = QColor(HANDLE)
@@ -123,10 +125,22 @@ class CanvasWidget(QWidget):
         p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         p.drawText(QPointF(x0 + 4, y0 - 4), label)
 
-    def _draw_stamp_preview(self, p: QPainter, view: CanvasView, svg_name: str, img_x: int, img_y: int, size: int, alpha: int = 120):
+    def _draw_stamp_preview(
+        self,
+        p: QPainter,
+        view: CanvasView,
+        svg_name: str,
+        img_x: int,
+        img_y: int,
+        size_percent: int,
+        image_height: int,
+        alpha: int = 120,
+    ):
         if not svg_name:
             return
-        stamp_image = render_stamp_rgba(svg_name, size, None)
+        stamp_image = render_stamp_rgba(
+            svg_name, stamp_height_px(size_percent, image_height), None
+        )
         if stamp_image.getbbox() is None:
             return
         left = img_x
@@ -180,7 +194,7 @@ class CanvasWidget(QWidget):
 
         if 0 <= view.selected_stamp_index < len(view.stamps):
             stamp = view.stamps[view.selected_stamp_index]
-            self._draw_stamp_selection_guide(p, stamp, stamp.name)
+            self._draw_stamp_selection_guide(p, stamp, stamp.name, view.image_height)
 
         if len(view.current_points) >= 2:
             smooth = smooth_path_for_text(view.current_points)
@@ -200,7 +214,15 @@ class CanvasWidget(QWidget):
         if view.tool_mode == "stamp" and view.selected_stamp_index < 0 and view.stamp_preview_svg:
             img_x = int((x - view.offset_x) / max(view.scale, 0.0001))
             img_y = int((y - view.offset_y) / max(view.scale, 0.0001))
-            self._draw_stamp_preview(p, view, view.stamp_preview_svg, img_x, img_y, view.stamp_size)
+            self._draw_stamp_preview(
+                p,
+                view,
+                view.stamp_preview_svg,
+                img_x,
+                img_y,
+                view.stamp_size,
+                view.image_height,
+            )
             return
         radius = max(1.0, int(view.brush_size) * max(view.scale, 0.0001) / 2)
         p.setPen(QPen(QColor("#facc15"), 2))
