@@ -101,6 +101,7 @@ class Document:
             return 0
         return estimate_footer_height(
             self.full_w,
+            self.full_h,
             self.metadata,
             self.settings.metadata_copy_text,
         )
