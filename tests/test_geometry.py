@@ -3,10 +3,15 @@ import math
 import pytest
 
 from brush_watermark.geometry.path_text import (
+    MIN_TANGENT_WIDTH_CHARS,
     angle_unwrap,
     averaged_angle,
     blend_angles,
+    glyph_rotation_degrees,
     point_at_distance,
+    smooth_path_for_text,
+    tangent_angle_at_distance,
+    tangent_half_window,
 )
 from brush_watermark.geometry.points import (
     chaikin_smooth,
@@ -145,3 +150,31 @@ class TestAngles:
         points = [(0, 0), (100, 0)]
         angle = averaged_angle(points, 50, 20)
         assert angle == pytest.approx(0.0, abs=0.1)
+
+    def test_tangent_half_window_uses_three_characters(self):
+        assert tangent_half_window(10) == pytest.approx(15.0)
+        assert tangent_half_window(10) == pytest.approx(
+            (MIN_TANGENT_WIDTH_CHARS / 2.0) * 10
+        )
+
+    def test_tangent_angle_uses_minimum_three_character_window(self):
+        # Zig-zag path; a tiny window follows the local segment, a wide one stabilizes.
+        points = [(0, 0), (10, 30), (20, 0), (30, 30), (40, 0), (100, 0)]
+        center = path_length(points) / 2
+        narrow = tangent_angle_at_distance(points, center, 2.0)
+        wide = tangent_angle_at_distance(points, center, tangent_half_window(10))
+        assert narrow != pytest.approx(wide, abs=0.05)
+
+    def test_tangent_angle_horizontal_path(self):
+        points = [(0, 0), (100, 0)]
+        angle = tangent_angle_at_distance(points, 50, tangent_half_window(10))
+        assert angle == pytest.approx(0.0, abs=0.01)
+
+    def test_glyph_rotation_degrees_matches_image_coordinates(self):
+        assert glyph_rotation_degrees(0.0) == pytest.approx(0.0)
+        assert glyph_rotation_degrees(math.pi / 2, 15) == pytest.approx(-75.0)
+
+    def test_smooth_path_for_text_expands_curved_paths(self):
+        points = [(0, 0), (50, 0), (100, 0)]
+        result = smooth_path_for_text(points, iterations=1)
+        assert len(result) > len(points)

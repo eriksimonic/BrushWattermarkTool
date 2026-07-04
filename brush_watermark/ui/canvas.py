@@ -4,8 +4,8 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen, QWheelEvent
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-from brush_watermark.geometry.path_text import point_at_distance
-from brush_watermark.geometry.points import chaikin_smooth, normalize_text_direction, simplify_points
+from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
+from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView
 
 if TYPE_CHECKING:
@@ -142,7 +142,7 @@ class CanvasWidget(QWidget):
             self._draw_stroke_selection_guide(p, stroke.points, stroke.name)
 
         if len(view.current_points) >= 2:
-            smooth = chaikin_smooth(simplify_points(view.current_points, min_dist=3.0), iterations=3)
+            smooth = smooth_path_for_text(view.current_points)
             smooth = normalize_text_direction(smooth)
             width = max(2.0, view.current_brush_size * max(view.scale, 0.0001) * 0.08)
             self._draw_polyline(p, smooth, "#facc15", width)

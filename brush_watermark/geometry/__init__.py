@@ -1,8 +1,13 @@
 from brush_watermark.geometry.path_text import (
+    MIN_TANGENT_WIDTH_CHARS,
     angle_unwrap,
     averaged_angle,
     blend_angles,
+    glyph_rotation_degrees,
     point_at_distance,
+    smooth_path_for_text,
+    tangent_angle_at_distance,
+    tangent_half_window,
 )
 from brush_watermark.geometry.points import (
     Point,
@@ -17,15 +22,20 @@ from brush_watermark.geometry.points import (
 
 __all__ = [
     "Point",
+    "MIN_TANGENT_WIDTH_CHARS",
     "angle_unwrap",
     "averaged_angle",
     "blend_angles",
     "chaikin_smooth",
     "clamp",
     "dist",
+    "glyph_rotation_degrees",
     "normalize_text_direction",
     "path_length",
     "point_at_distance",
     "point_segment_distance",
+    "smooth_path_for_text",
     "simplify_points",
+    "tangent_angle_at_distance",
+    "tangent_half_window",
 ]

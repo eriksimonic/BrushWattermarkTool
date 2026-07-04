@@ -1,12 +1,13 @@
-import math
-
 from PIL import Image, ImageDraw
+import math
 
 from brush_watermark.geometry.path_text import (
     angle_unwrap,
-    averaged_angle,
-    blend_angles,
+    glyph_rotation_degrees,
     point_at_distance,
+    smooth_path_for_text,
+    tangent_angle_at_distance,
+    tangent_half_window,
 )
 from brush_watermark.geometry.points import clamp, normalize_text_direction, path_length
 from brush_watermark.models import Settings, Stroke, TextSpan
@@ -51,7 +52,7 @@ def fitted_font_size(
     return 10
 
 
-def build_glyph_cache(text: str, font, fill: tuple) -> list[tuple[Image.Image, int]]:
+def build_glyph_cache(text: str, font, fill: tuple) -> list[tuple[Image.Image, int, float, float]]:
     dummy = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
     draw = ImageDraw.Draw(dummy)
     glyphs = []
@@ -61,11 +62,21 @@ def build_glyph_cache(text: str, font, fill: tuple) -> list[tuple[Image.Image, i
         glyph_h = max(1, bbox[3] - bbox[1])
         advance = max(1, glyph_w)
         pad = max(4, int(glyph_h * 0.25))
+        origin_x = pad - bbox[0]
+        origin_y = pad - bbox[1]
         glyph = Image.new("RGBA", (glyph_w + pad * 2, glyph_h + pad * 2), (0, 0, 0, 0))
         gd = ImageDraw.Draw(glyph)
-        gd.text((pad - bbox[0], pad - bbox[1]), ch, font=font, fill=fill)
-        glyphs.append((glyph, advance))
+        gd.text((origin_x, origin_y), ch, font=font, fill=fill)
+        anchor_x = origin_x + glyph_w / 2.0
+        anchor_y = origin_y + glyph_h / 2.0
+        glyphs.append((glyph, advance, anchor_x, anchor_y))
     return glyphs
+
+
+def _prepare_text_path(raw_points: list) -> list:
+    if len(raw_points) < 2:
+        return raw_points
+    return smooth_path_for_text(normalize_text_direction(raw_points))
 
 
 def compute_text_span(
@@ -78,7 +89,7 @@ def compute_text_span(
     text = text.strip()
     if not text or len(points) < 2:
         return None
-    points = normalize_text_direction(points)
+    points = _prepare_text_path(points)
     length = path_length(points)
     if length < 8:
         return None
@@ -104,17 +115,33 @@ def compute_text_span(
     )
 
 
-def draw_centered_rotated(
+def draw_glyph_on_path(
     layer: Image.Image,
     glyph: Image.Image,
+    anchor_x: float,
+    anchor_y: float,
     x: float,
     y: float,
     angle_degrees: float,
 ) -> None:
-    rotated = glyph.rotate(angle_degrees, expand=True, resample=Image.Resampling.BICUBIC)
-    px = int(x - rotated.size[0] / 2)
-    py = int(y - rotated.size[1] / 2)
-    layer.alpha_composite(rotated, (px, py))
+    half = int(
+        math.ceil(
+            max(
+                anchor_x,
+                glyph.size[0] - anchor_x,
+                anchor_y,
+                glyph.size[1] - anchor_y,
+            )
+        )
+    ) + 1
+    canvas = Image.new("RGBA", (half * 2, half * 2), (0, 0, 0, 0))
+    paste_x = half - int(round(anchor_x))
+    paste_y = half - int(round(anchor_y))
+    canvas.paste(glyph, (paste_x, paste_y))
+    rotated = canvas.rotate(angle_degrees, expand=True, resample=Image.Resampling.BICUBIC)
+    rcx = rotated.size[0] / 2.0
+    rcy = rotated.size[1] / 2.0
+    layer.alpha_composite(rotated, (int(round(x - rcx)), int(round(y - rcy))))
 
 
 def draw_text_on_path(
@@ -127,7 +154,7 @@ def draw_text_on_path(
     raw_points = stroke.points
     if len(raw_points) < 2:
         return
-    points = normalize_text_direction(raw_points)
+    points = _prepare_text_path(raw_points)
     text = settings.watermark_text.strip()
     if not text:
         return
@@ -150,28 +177,25 @@ def draw_text_on_path(
     start = max(0.0, (length - used_span) / 2.0)
     total_extra = max(0.0, used_span - base_width)
     gap_extra = total_extra / max(1, len(glyphs) - 1)
-
-    x0, y0, _ = point_at_distance(points, start)
-    x1, y1, _ = point_at_distance(points, start + used_span)
-    baseline_angle = math.atan2(y1 - y0, x1 - x0) + math.radians(stroke.angle_offset)
+    avg_advance = base_width / len(glyphs)
+    half_window = tangent_half_window(avg_advance)
 
     pos = start
-    prev_angle = baseline_angle
-    for glyph, advance in glyphs:
+    prev_tangent: float | None = None
+    for glyph, advance, anchor_x, anchor_y in glyphs:
         center_d = pos + advance / 2.0
         x, y, _ = point_at_distance(points, center_d)
-        local_angle = averaged_angle(points, center_d, max(font_size * 2.4, 40))
-        local_angle = angle_unwrap(baseline_angle, local_angle)
-        mixed_angle = blend_angles(baseline_angle, local_angle, 0.28)
-        mixed_angle = angle_unwrap(prev_angle, mixed_angle)
-        max_step = math.radians(10)
-        delta = mixed_angle - prev_angle
-        if delta > max_step:
-            mixed_angle = prev_angle + max_step
-        elif delta < -max_step:
-            mixed_angle = prev_angle - max_step
-        draw_centered_rotated(layer, glyph, x, y, math.degrees(mixed_angle))
-        prev_angle = mixed_angle
+        tangent = tangent_angle_at_distance(
+            points,
+            center_d,
+            half_window,
+            total_length=length,
+        )
+        if prev_tangent is not None:
+            tangent = angle_unwrap(prev_tangent, tangent)
+        prev_tangent = tangent
+        angle_degrees = glyph_rotation_degrees(tangent, stroke.angle_offset)
+        draw_glyph_on_path(layer, glyph, anchor_x, anchor_y, x, y, angle_degrees)
         pos += advance + gap_extra
 
 
