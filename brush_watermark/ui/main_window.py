@@ -5,8 +5,8 @@ from typing import Optional
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QSizePolicy, QWidget
 
 from brush_watermark import __version__
@@ -94,14 +94,14 @@ class MainWindow(QMainWindow):
         root.addWidget(self.canvas, 1)
 
         self.sidebar_scroll = QScrollArea()
-        self.sidebar_scroll.setWidgetResizable(False)
+        self.sidebar_scroll.setWidgetResizable(True)
         self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.sidebar_scroll.setFixedWidth(340)
         root.addWidget(self.sidebar_scroll)
 
         self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors)
-        self.sidebar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
         self.sidebar_scroll.setWidget(self.sidebar)
 
     def _connect_signals(self):
@@ -130,12 +130,13 @@ class MainWindow(QMainWindow):
 
     def start_auto_update(self):
         result = self._update_result
-        if (
-            result is None
-            or not result.update_available
-            or not result.download_url
-            or not can_auto_update()
-        ):
+        if result is None or not result.update_available:
+            return
+        if not can_auto_update():
+            QDesktopServices.openUrl(QUrl(result.release_url))
+            return
+        if not result.download_url:
+            QDesktopServices.openUrl(QUrl(result.release_url))
             return
 
         answer = QMessageBox.question(

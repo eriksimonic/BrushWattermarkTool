@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -14,7 +15,6 @@ from PySide6.QtWidgets import (
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
-from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
 from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, SliderRow
@@ -159,11 +159,16 @@ class SidebarPanel(QWidget):
         self.update_progress_label.hide()
         help_layout.addWidget(self.update_progress_label)
 
+        layout.addStretch(1)
+
     def _refresh_layout(self):
         self.adjustSize()
         parent = self.parentWidget()
-        if parent is not None:
+        while parent is not None:
             parent.updateGeometry()
+            if isinstance(parent, QScrollArea):
+                break
+            parent = parent.parentWidget()
 
     def _connect_signals(self):
         emit_document = lambda *_: self.document_settings_changed.emit()
@@ -294,12 +299,13 @@ class SidebarPanel(QWidget):
             self._refresh_layout()
             return
         if result.update_available and result.latest_version:
-            if can_auto_update() and result.download_url:
+            if result.download_url:
                 self.update_status_label.setText(
                     f"Version {result.latest_version} is available."
                 )
                 self.update_now_button.show()
             else:
+                self.update_status_label.setTextFormat(Qt.TextFormat.RichText)
                 self.update_status_label.setText(
                     f'<a href="{result.release_url}">'
                     f"Version {result.latest_version} is available — open release page"
