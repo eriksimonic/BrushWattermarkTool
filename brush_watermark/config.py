@@ -23,6 +23,16 @@ RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases/latest"
 GITHUB_API_LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 UPDATE_ASSET_NAME = "BrushWatermark.zip"
 UPDATE_ASSET_FILENAME = UPDATE_ASSET_NAME
+
+
+def update_asset_name() -> str:
+    if sys.platform == "win32":
+        return "BrushWatermark.zip"
+    if sys.platform == "darwin":
+        return "BrushWatermark-macOS.zip"
+    return "BrushWatermark-Linux.tar.gz"
+
+
 USER_AGENT = "BrushWatermark"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg"}
 CONFIG_DIR = Path.home() / ".lightroom_brush_watermark"

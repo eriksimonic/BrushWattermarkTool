@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
-from brush_watermark.rendering.fonts import font_candidates
+from brush_watermark.rendering.fonts import available_font_names
 from brush_watermark.services.exif_metadata import ImageMetadata
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
@@ -75,8 +75,12 @@ class SidebarPanel(QWidget):
 
         self.watermark_text_edit = QLineEdit(settings.watermark_text)
         self.font_combo = QComboBox()
-        self.font_combo.addItems(list(font_candidates().keys()))
-        self.font_combo.setCurrentText(settings.font_name)
+        font_names = available_font_names()
+        self.font_combo.addItems(font_names)
+        if settings.font_name in font_names:
+            self.font_combo.setCurrentText(settings.font_name)
+        elif font_names:
+            self.font_combo.setCurrentIndex(0)
         self.auto_fit_check = BoxCheckBox("Auto fit text to stroke")
         self.auto_fit_check.setChecked(settings.auto_fit_text)
 

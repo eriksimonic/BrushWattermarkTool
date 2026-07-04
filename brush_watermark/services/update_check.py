@@ -8,9 +8,9 @@ from brush_watermark import __version__
 from brush_watermark.config import (
     GITHUB_API_LATEST_RELEASE_URL,
     RELEASES_URL,
-    UPDATE_ASSET_NAME,
     USER_AGENT,
     VERSION_RAW_URL,
+    update_asset_name,
 )
 
 
@@ -64,10 +64,11 @@ def parse_release_payload(payload: dict) -> tuple[str, str | None]:
         raise ValueError("Release is missing a version tag")
 
     download_url: str | None = None
+    asset_name = update_asset_name()
     for asset in payload.get("assets", []):
         if not isinstance(asset, dict):
             continue
-        if asset.get("name") == UPDATE_ASSET_NAME:
+        if asset.get("name") == asset_name:
             download_url = asset.get("browser_download_url")
             break
     return version, download_url

@@ -1,7 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — trimmed onedir build for faster startup and smaller footprint."""
 
+import sys
+
 block_cipher = None
+IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 
 # Unused PySide6 modules (app only needs QtCore, QtGui, QtWidgets).
 _PYSIDE6_UNUSED = [
@@ -38,8 +43,7 @@ _EXCLUDES = [
     *_PYSIDE6_UNUSED,
 ]
 
-# Qt / PIL artifacts not needed for a JPG watermark tool on Windows.
-_DROP_BINARY_FRAGMENTS = (
+_COMMON_DROP_FRAGMENTS = (
     "numpy",
     "numpy.libs",
     "pil/_imagingtk",
@@ -49,7 +53,6 @@ _DROP_BINARY_FRAGMENTS = (
     "charset_normalizer",
     "plugins/platforms/qoffscreen",
     "plugins/platforms/qminimal",
-    "plugins/platforms/qdirect2d",
     "plugins/platforminputcontexts",
     "plugins/generic/qtuiotouch",
     "plugins/imageformats/qpdf",
@@ -61,8 +64,23 @@ _DROP_BINARY_FRAGMENTS = (
     "plugins/iconengines",
     "plugins/tls/",
     "plugins/networkinformation",
+)
+
+_WIN_DROP_FRAGMENTS = _COMMON_DROP_FRAGMENTS + (
+    "plugins/platforms/qdirect2d",
     "opengl32sw.dll",
 )
+
+_MAC_DROP_FRAGMENTS = _COMMON_DROP_FRAGMENTS
+
+_LINUX_DROP_FRAGMENTS = _COMMON_DROP_FRAGMENTS
+
+if IS_WIN:
+    _DROP_BINARY_FRAGMENTS = _WIN_DROP_FRAGMENTS
+elif IS_MAC:
+    _DROP_BINARY_FRAGMENTS = _MAC_DROP_FRAGMENTS
+else:
+    _DROP_BINARY_FRAGMENTS = _LINUX_DROP_FRAGMENTS
 
 
 def _norm(path: str) -> str:
@@ -73,6 +91,13 @@ def _drop_artifact(name: str) -> bool:
     normalized = _norm(name)
     return any(fragment in normalized for fragment in _DROP_BINARY_FRAGMENTS)
 
+
+if IS_WIN:
+    _exe_icon = "brush_watermark/assets/icon.ico"
+elif IS_MAC:
+    _exe_icon = "brush_watermark/assets/icon.icns"
+else:
+    _exe_icon = None
 
 a = Analysis(
     ["brush_watermark/__main__.py"],
@@ -95,10 +120,7 @@ a.datas = [entry for entry in a.datas if not _drop_artifact(entry[0])]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
+_exe_kwargs = dict(
     exclude_binaries=True,
     name="BrushWatermark",
     debug=False,
@@ -108,13 +130,16 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
-    icon="brush_watermark/assets/icon.ico",
     disable_windowed_traceback=False,
-    argv_emulation=False,
+    argv_emulation=IS_MAC,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
 )
+if _exe_icon:
+    _exe_kwargs["icon"] = _exe_icon
+
+exe = EXE(pyz, a.scripts, [], **_exe_kwargs)
 
 coll = COLLECT(
     exe,
@@ -126,3 +151,11 @@ coll = COLLECT(
     upx_exclude=[],
     name="BrushWatermark",
 )
+
+if IS_MAC:
+    app = BUNDLE(
+        coll,
+        name="BrushWatermark.app",
+        icon="brush_watermark/assets/icon.icns",
+        bundle_identifier="com.eriksimonic.brushwatermark",
+    )

@@ -44,7 +44,7 @@ class TestIsNewerVersion:
 
 
 class TestParseReleasePayload:
-    def test_reads_version_and_asset(self):
+    def test_reads_version_and_asset_windows(self):
         payload = {
             "tag_name": "v2.3.4",
             "assets": [
@@ -52,11 +52,33 @@ class TestParseReleasePayload:
                 {"name": "notes.txt", "browser_download_url": "https://example.com/notes.txt"},
             ],
         }
-        assert parse_release_payload(payload) == ("2.3.4", "https://example.com/app.zip")
+        with patch.object(sys, "platform", "win32"):
+            assert parse_release_payload(payload) == ("2.3.4", "https://example.com/app.zip")
+
+    def test_reads_version_and_asset_macos(self):
+        payload = {
+            "tag_name": "v2.3.4",
+            "assets": [
+                {"name": "BrushWatermark-macOS.zip", "browser_download_url": "https://example.com/mac.zip"},
+            ],
+        }
+        with patch.object(sys, "platform", "darwin"):
+            assert parse_release_payload(payload) == ("2.3.4", "https://example.com/mac.zip")
+
+    def test_reads_version_and_asset_linux(self):
+        payload = {
+            "tag_name": "v2.3.4",
+            "assets": [
+                {"name": "BrushWatermark-Linux.tar.gz", "browser_download_url": "https://example.com/linux.tgz"},
+            ],
+        }
+        with patch.object(sys, "platform", "linux"):
+            assert parse_release_payload(payload) == ("2.3.4", "https://example.com/linux.tgz")
 
     def test_missing_asset_returns_none_url(self):
         payload = {"tag_name": "v1.0.0", "assets": []}
-        assert parse_release_payload(payload) == ("1.0.0", None)
+        with patch.object(sys, "platform", "win32"):
+            assert parse_release_payload(payload) == ("1.0.0", None)
 
 
 class TestFetchLatestRelease:
@@ -67,7 +89,7 @@ class TestFetchLatestRelease:
                 {"name": "BrushWatermark.zip", "browser_download_url": "https://example.com/app.zip"},
             ],
         }
-        with patch("urllib.request.urlopen") as urlopen:
+        with patch.object(sys, "platform", "win32"), patch("urllib.request.urlopen") as urlopen:
             urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(payload).encode(
                 "utf-8"
             )

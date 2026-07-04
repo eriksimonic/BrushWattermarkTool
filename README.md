@@ -21,27 +21,50 @@ Each watermark is saved into the image file itself (JPEG). Settings such as defa
 
 ## Requirements
 
-- Windows (standalone `.exe` or run from source)
+- Windows, macOS, or Linux (standalone build or run from source)
 - Python 3.13+ when running from source
 - JPG or JPEG input files only
 
 ## Run from source
 
-```powershell
+```bash
 pip install -r requirements.txt
-python -m brush_watermark path\to\image.jpg
+python -m brush_watermark path/to/image.jpg
 ```
 
-(`python brush_watermark.py path\to\image.jpg` also works — it is a thin wrapper around the same entry point.)
+(`python brush_watermark.py path/to/image.jpg` also works — it is a thin wrapper around the same entry point.)
 
 If you omit the file path, a file picker opens.
 
 ## Run the executable
 
-Download `BrushWatermark.zip` from [Releases](https://github.com/eriksimonic/BrushWattermarkTool/releases/latest), extract it, then:
+Download the build for your platform from [Releases](https://github.com/eriksimonic/BrushWattermarkTool/releases/latest).
+
+### Windows
+
+Extract `BrushWatermark.zip`, then:
 
 ```powershell
 BrushWatermark\BrushWatermark.exe path\to\image.jpg
+```
+
+### macOS
+
+Extract `BrushWatermark-macOS.zip`, then open `BrushWatermark.app`. If Gatekeeper blocks the unsigned app on first launch, right-click the app and choose **Open**.
+
+You can also pass an image path from Terminal:
+
+```bash
+open dist/BrushWatermark.app --args path/to/image.jpg
+```
+
+### Linux
+
+Extract `BrushWatermark-Linux.tar.gz`, then:
+
+```bash
+chmod +x BrushWatermark/BrushWatermark   # if needed
+./BrushWatermark/BrushWatermark path/to/image.jpg
 ```
 
 ## Using the app
@@ -72,26 +95,42 @@ Lightroom-style panels on the right: section dividers, label-left / value-right 
 
 Tool defaults and watermark text are stored in:
 
-`%USERPROFILE%\.lightroom_brush_watermark\settings.json`
+`~/.lightroom_brush_watermark/settings.json`
+
+(On Windows this is `%USERPROFILE%\.lightroom_brush_watermark\settings.json`.)
 
 ## Build the executable
+
+### Windows
 
 ```powershell
 .\build.ps1
 ```
 
-Output: `dist\BrushWatermark\` (folder) and `dist\BrushWatermark.zip` (for distribution)
+Output: `dist\BrushWatermark\` (folder) and `dist\BrushWatermark.zip`
+
+### macOS / Linux
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+Output:
+
+- **macOS:** `dist/BrushWatermark.app` and `dist/BrushWatermark-macOS.zip`
+- **Linux:** `dist/BrushWatermark/` and `dist/BrushWatermark-Linux.tar.gz`
 
 ## Tests
 
-```powershell
+```bash
 pip install -r requirements-dev.txt
 pytest
 ```
 
 ## Releases
 
-Pushing Python changes (`.py` files) to `main` triggers the GitHub Actions release workflow: tests, bump the minor version, build `BrushWatermark.zip` with that version embedded, publish the GitHub release, then commit the version back to `main`. Pushes that only change other files (docs, config, assets, etc.) do not create a release. The app checks GitHub at startup; packaged Windows builds also offer a **Download and install update** button when a newer release is available.
+Pushing Python changes (`.py` files) to `main` triggers the GitHub Actions release workflow: tests, bump the minor version, build platform packages (`BrushWatermark.zip`, `BrushWatermark-macOS.zip`, `BrushWatermark-Linux.tar.gz`) with that version embedded, publish the GitHub release, then commit the version back to `main`. Pushes that only change other files (docs, config, assets, etc.) do not create a release. The app checks GitHub at startup; packaged Windows builds also offer a **Download and install update** button when a newer release is available.
 
 ---
 

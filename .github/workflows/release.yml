@@ -12,15 +12,12 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  test:
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
-    runs-on: windows-latest
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,14 +28,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-          pip install pyinstaller
 
       - name: Run tests
         run: pytest
 
+  bump-version:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Bump minor version
         id: bump
-        shell: bash
         run: |
           NEW_VERSION=$(python - <<'PY'
           import re
@@ -65,38 +70,125 @@ jobs:
           )
           echo "$NEW_VERSION" > VERSION
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload version files
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-files
+          path: |
+            brush_watermark/__init__.py
+            VERSION
+
+  build:
+    needs: bump-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: BrushWatermark.zip
+          - os: macos-latest
+            artifact: BrushWatermark-macOS.zip
+          - os: ubuntu-22.04
+            artifact: BrushWatermark-Linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download version files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-files
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install pyinstaller
 
       - name: Build executable
         run: python -m PyInstaller --noconfirm --clean BrushWatermark.spec
 
-      - name: Package release zip
+      - name: Package Windows release
+        if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path dist/BrushWatermark -DestinationPath dist/BrushWatermark.zip -Force
 
-      - name: Resolve version and tag
-        id: version
-        shell: bash
+      - name: Package macOS release
+        if: runner.os == 'macOS'
         run: |
-          echo "version=${{ steps.bump.outputs.new_version }}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${{ steps.bump.outputs.new_version }}" >> "$GITHUB_OUTPUT"
+          test -d dist/BrushWatermark.app
+          cd dist
+          zip -r -y BrushWatermark-macOS.zip BrushWatermark.app
+
+      - name: Package Linux release
+        if: runner.os == 'Linux'
+        run: |
+          test -f dist/BrushWatermark/BrushWatermark
+          chmod +x dist/BrushWatermark/BrushWatermark
+          tar -czf dist/BrushWatermark-Linux.tar.gz -C dist BrushWatermark
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    needs: [bump-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: BrushWatermark*
+          merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: BrushWatermark ${{ steps.version.outputs.version }}
+          tag_name: ${{ needs.bump-version.outputs.tag }}
+          name: BrushWatermark ${{ needs.bump-version.outputs.new_version }}
           body: |
             Automated release from commit ${{ github.sha }}.
 
-            **Usage:** extract `BrushWatermark.zip`, then run `BrushWatermark.exe path\to\image.jpg`
-          files: dist/BrushWatermark.zip
+            **Windows:** extract `BrushWatermark.zip`, then run `BrushWatermark.exe path\to\image.jpg`
+
+            **macOS:** extract `BrushWatermark-macOS.zip`, then open `BrushWatermark.app` (right-click → Open on first launch if Gatekeeper blocks it). Pass an image path as a command-line argument if needed.
+
+            **Linux:** extract `BrushWatermark-Linux.tar.gz`, then run `./BrushWatermark/BrushWatermark path/to/image.jpg` (use `chmod +x` if needed).
+          files: |
+            dist/BrushWatermark.zip
+            dist/BrushWatermark-macOS.zip
+            dist/BrushWatermark-Linux.tar.gz
           generate_release_notes: true
 
+  commit-version:
+    needs: [bump-version, release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download version files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-files
+
       - name: Commit and push version bump
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add brush_watermark/__init__.py VERSION
-          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git commit -m "chore: bump version to ${{ needs.bump-version.outputs.new_version }} [skip ci]"
           git push
