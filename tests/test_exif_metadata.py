@@ -3,7 +3,9 @@ from brush_watermark.services.exif_metadata import (
     format_exposure,
     format_fnumber,
     format_focal_length,
+    read_exif_bytes,
 )
+from PIL import Image
 
 
 class TestExifFormatting:
@@ -18,6 +20,23 @@ class TestExifFormatting:
 
     def test_format_focal_length(self):
         assert format_focal_length((500, 10)) == "50mm"
+
+    def test_read_exif_bytes_preserves_original_payload(self, tmp_path):
+        image_path = tmp_path / "source.jpg"
+        exif = Image.Exif()
+        exif[271] = "Nikon"
+        exif[272] = "Z8"
+        Image.new("RGB", (8, 8), "white").save(image_path, format="JPEG", exif=exif)
+
+        exif_bytes = read_exif_bytes(image_path)
+        output_path = tmp_path / "output.jpg"
+        Image.new("RGB", (8, 8), "black").save(output_path, format="JPEG", exif=exif_bytes)
+
+        with Image.open(output_path) as output:
+            output_exif = output.getexif()
+
+        assert output_exif[271] == "Nikon"
+        assert output_exif[272] == "Z8"
 
 
 class TestImageMetadata:

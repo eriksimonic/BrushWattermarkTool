@@ -530,7 +530,10 @@ class MainWindow(QMainWindow):
     def _write_final_image(self, export_path: Path) -> bool:
         try:
             final = self.doc.make_full_composited_image()
-            final.save(export_path, quality=95, subsampling=0, optimize=True)
+            save_kwargs = {"quality": 95, "subsampling": 0, "optimize": True}
+            if self.doc.exif_bytes:
+                save_kwargs["exif"] = self.doc.exif_bytes
+            final.save(export_path, **save_kwargs)
         except OSError as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
             return False

@@ -17,7 +17,7 @@ from brush_watermark.rendering.blend import blend_mode_short
 from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_preview_image
-from brush_watermark.services.exif_metadata import ImageMetadata, read_image_metadata
+from brush_watermark.services.exif_metadata import ImageMetadata, read_exif_bytes, read_image_metadata
 
 
 class Document:
@@ -33,6 +33,7 @@ class Document:
         self.settings = settings
         self.original = Image.open(self.image_path).convert("RGB")
         self.full_w, self.full_h = self.original.size
+        self.exif_bytes = read_exif_bytes(self.image_path)
         self.metadata = read_image_metadata(self.image_path)
 
         self.strokes: list[Stroke] = []

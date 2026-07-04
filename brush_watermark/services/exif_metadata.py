@@ -36,6 +36,15 @@ def read_exif_map(image_path: Path) -> dict[str, object]:
         return {}
 
 
+def read_exif_bytes(image_path: Path) -> bytes:
+    try:
+        with Image.open(image_path) as opened:
+            exif = opened.getexif()
+            return exif.tobytes() if exif else b""
+    except (AttributeError, OSError, TypeError, ValueError):
+        return b""
+
+
 def read_exif_map_from_image(image: Image.Image) -> dict[str, object]:
     try:
         exif = image.getexif()
