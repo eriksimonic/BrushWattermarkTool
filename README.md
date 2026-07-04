@@ -11,7 +11,8 @@ Each watermark is saved into the image file itself (JPEG). Settings such as defa
 ## Features
 
 - **Brush strokes** — paint watermark paths with the mouse; text is laid out along the stroke
-- **Per-layer control** — each stroke has its own color, blend mode, strength, brush size, angle, and edge softness
+- **Per-layer control** — each stroke has its own color, blend mode, strength, brush size, softness, and repeat settings
+- **Repeat text** — optionally tile watermark text along long strokes, with adjustable gap
 - **Blend modes** — Normal, Soft light, Lighten, Darken, Difference, Overlay, Screen, Multiply, Hard light
 - **Image color picker** — 8 colors sampled from the photo, plus white, 50% gray, and black
 - **Erase mask** — right-click paint to hide watermark areas without deleting strokes
@@ -28,8 +29,10 @@ Each watermark is saved into the image file itself (JPEG). Settings such as defa
 
 ```powershell
 pip install -r requirements.txt
-python brush_watermark.py path\to\image.jpg
+python -m brush_watermark path\to\image.jpg
 ```
+
+(`python brush_watermark.py path\to\image.jpg` also works — it is a thin wrapper around the same entry point.)
 
 If you omit the file path, a file picker opens.
 
@@ -58,12 +61,12 @@ BrushWatermark\BrushWatermark.exe path\to\image.jpg
 
 Lightroom-style panels on the right: section dividers, label-left / value-right sliders with teardrop handles, and neutral gray chrome (`#3B3B3B` panel, `#2A2A2A` canvas surround). See [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui/DESIGN.md) for the full UI spec.
 
-- **Watermark** — text, font, and auto-fit (apply to all strokes)
-- **Layers** — list of strokes; delete or clear all
-- **Brush** — when nothing is selected, these set **tool defaults** for the next stroke; when a layer is selected, they edit **that layer**
+- **Watermark** — text, font, and auto-fit (applies to all strokes)
+- **Brush** — color, blend mode, strength, brush size, softness, and repeat along stroke; sets **tool defaults** when nothing is selected, or edits the **selected layer** (section title shows `Layer · …`)
+- **Layers** — stroke list; **Delete** or **Clear all**
 - **Help** — shortcuts, current version, and link to a newer release if one is available
 
-Click **Save and close** to write the watermarked image (quality 95, same path). **Exit without saving** discards changes to the image.
+**Save and close** writes the watermarked image back to the same file (JPEG quality 95). Enable **Show in Explorer after save** to open the file location when done. **Exit without saving** discards changes to the image (tool defaults and watermark text are still saved to settings).
 
 ### Settings file
 
