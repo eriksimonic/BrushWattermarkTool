@@ -60,8 +60,9 @@ class CanvasWidget(QWidget):
         if self.preview_pixmap is not None:
             p.drawPixmap(int(view.offset_x), int(view.offset_y), self.preview_pixmap)
 
-        self._draw_overlay(p, view)
-        self._draw_cursor(p, view)
+        if not view.show_original:
+            self._draw_overlay(p, view)
+            self._draw_cursor(p, view)
 
     def _draw_polyline(
         self,

@@ -17,6 +17,7 @@ from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.document import Document
+from brush_watermark.services.export import build_watermarked_copy_path
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.canvas import CanvasWidget
@@ -99,7 +100,7 @@ class MainWindow(QMainWindow):
         self.sidebar_scroll.setFixedWidth(340)
         root.addWidget(self.sidebar_scroll)
 
-        self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors)
+        self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors, self.doc.metadata)
         self.sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
         self.sidebar_scroll.setWidget(self.sidebar)
 
@@ -110,7 +111,9 @@ class MainWindow(QMainWindow):
         self.sidebar.delete_selected.connect(self.delete_selected_stroke)
         self.sidebar.delete_all.connect(self.clear_all)
         self.sidebar.save_and_close.connect(self.save_and_close)
+        self.sidebar.save_copy_and_close.connect(self.save_copy_and_close)
         self.sidebar.exit_without_saving.connect(self.exit_without_saving)
+        self.sidebar.preview_mode_changed.connect(self.on_preview_mode_changed)
         self.sidebar.update_now.connect(self.start_auto_update)
 
     def _start_update_check(self):
@@ -184,6 +187,7 @@ class MainWindow(QMainWindow):
             offset_y=self.offset_y,
             last_pointer=self.last_pointer,
             brush_size=self.sidebar.brush_row.slider.value(),
+            show_original=self.sidebar.show_original_preview(),
         )
 
     def _sync_document_settings_from_sidebar(self):
@@ -299,6 +303,10 @@ class MainWindow(QMainWindow):
             canvas_x, canvas_y, self.display_w, self.display_h, self.offset_x, self.offset_y
         )
 
+    def on_preview_mode_changed(self):
+        self.canvas.update()
+        self.schedule_preview(1)
+
     def schedule_preview(self, delay_ms: int = 50):
         self.update_labels()
         save_settings(self.doc.settings.to_dict())
@@ -312,12 +320,21 @@ class MainWindow(QMainWindow):
         self.update_labels()
         canvas_w = max(1, self.canvas.width())
         canvas_h = max(1, self.canvas.height())
-        self.scale = max(0.0001, min(canvas_w / self.doc.full_w, canvas_h / self.doc.full_h))
+        include_metadata = (
+            not self.sidebar.show_original_preview()
+            and self.doc.settings.add_visible_metadata
+        )
+        content_w, content_h = self.doc.preview_content_size(include_metadata=include_metadata)
+        self.scale = max(0.0001, min(canvas_w / content_w, canvas_h / content_h))
         self.display_w = max(1, int(self.doc.full_w * self.scale))
         self.display_h = max(1, int(self.doc.full_h * self.scale))
-        self.offset_x = (canvas_w - self.display_w) // 2
-        self.offset_y = (canvas_h - self.display_h) // 2
-        preview_image = self.doc.make_preview_image(self.display_w, self.display_h, self.scale)
+        if self.sidebar.show_original_preview():
+            preview_image = self.doc.make_original_preview_image(self.display_w, self.display_h)
+        else:
+            preview_image = self.doc.make_preview_image(self.display_w, self.display_h, self.scale)
+        pixmap_w, pixmap_h = preview_image.size
+        self.offset_x = (canvas_w - pixmap_w) // 2
+        self.offset_y = (canvas_h - pixmap_h) // 2
         self.preview_pixmap = pil_to_qpixmap(preview_image)
         self.canvas.preview_pixmap = self.preview_pixmap
         self.canvas.update()
@@ -430,26 +447,47 @@ class MainWindow(QMainWindow):
         self.select_stroke_by_index(-1, refresh_preview=False)
         self.schedule_preview()
 
-    def save_and_close(self):
+    def _sync_before_save(self):
         self._sync_document_settings_from_sidebar()
         if not self._layer_selected():
             self._sync_tool_defaults_from_sidebar()
         save_settings(self.doc.settings.to_dict())
-        if not self.doc.strokes:
-            answer = QMessageBox.question(
-                self, APP_NAME, "You did not paint any stroke. Save unchanged image and close?"
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
+
+    def _confirm_save_without_strokes(self) -> bool:
+        if self.doc.strokes:
+            return True
+        answer = QMessageBox.question(
+            self,
+            APP_NAME,
+            "You did not paint any stroke. Save unchanged image and close?",
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
+    def _write_final_image(self, export_path: Path) -> bool:
         try:
             final = self.doc.make_full_composited_image()
-            final.save(self.doc.image_path, quality=95, subsampling=0, optimize=True)
+            final.save(export_path, quality=95, subsampling=0, optimize=True)
         except OSError as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
-            return
+            return False
         if self.sidebar.reveal_in_explorer_check.isChecked():
-            reveal_in_explorer(self.doc.image_path)
-        self.close()
+            reveal_in_explorer(export_path)
+        return True
+
+    def save_and_close(self):
+        self._sync_before_save()
+        if not self._confirm_save_without_strokes():
+            return
+        if self._write_final_image(self.doc.image_path):
+            self.close()
+
+    def save_copy_and_close(self):
+        self._sync_before_save()
+        if not self._confirm_save_without_strokes():
+            return
+        export_path = build_watermarked_copy_path(self.doc.image_path)
+        if self._write_final_image(export_path):
+            self.close()
 
     def exit_without_saving(self):
         self._sync_document_settings_from_sidebar()

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import font_candidates
+from brush_watermark.services.exif_metadata import ImageMetadata
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
 from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, SliderRow
@@ -27,21 +28,45 @@ class SidebarPanel(QWidget):
     delete_selected = Signal()
     delete_all = Signal()
     save_and_close = Signal()
+    save_copy_and_close = Signal()
     exit_without_saving = Signal()
+    preview_mode_changed = Signal()
     update_now = Signal()
 
-    def __init__(self, settings: Settings, swatch_colors: list[str]):
+    def __init__(self, settings: Settings, swatch_colors: list[str], image_metadata: ImageMetadata | None = None):
         super().__init__()
         self._swatch_colors = swatch_colors
         self.setFixedWidth(340)
-        self._build_ui(settings)
+        self._build_ui(settings, image_metadata or ImageMetadata())
         self._connect_signals()
         self.load_tool_defaults(settings)
 
-    def _build_ui(self, settings: Settings):
+    def _build_ui(self, settings: Settings, image_metadata: ImageMetadata):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 12)
         layout.setSpacing(2)
+
+        layout.addWidget(SectionHeader("Image"))
+        image_layout = QVBoxLayout()
+        image_layout.setSpacing(4)
+        layout.addLayout(image_layout)
+
+        serial_text = image_metadata.serial or "Not found in EXIF"
+        self.serial_label = QLabel(f"Serial: {serial_text}")
+        self.serial_label.setObjectName("HintLabel")
+        self.serial_label.setWordWrap(True)
+        image_layout.addWidget(self.serial_label)
+
+        self.add_metadata_check = BoxCheckBox("Add visible metadata strip")
+        self.add_metadata_check.setChecked(settings.add_visible_metadata)
+        self.add_metadata_check.setToolTip(
+            "Expand the saved copy with camera, lens, settings, serial, and copy info at the bottom."
+        )
+        image_layout.addWidget(self.add_metadata_check)
+
+        self.metadata_copy_edit = QLineEdit(settings.metadata_copy_text)
+        self.metadata_copy_edit.setPlaceholderText("Additional copy info (optional)")
+        self._add_form_row(image_layout, "Copy", self.metadata_copy_edit, label_width=52)
 
         layout.addWidget(SectionHeader("Watermark"))
         watermark_layout = QVBoxLayout()
@@ -118,13 +143,20 @@ class SidebarPanel(QWidget):
 
         actions = QVBoxLayout()
         actions.setSpacing(4)
+        self.show_original_check = BoxCheckBox("Show original (before preview)")
+        self.show_original_check.setToolTip(
+            "Preview the original image without watermarks, strokes, or guides."
+        )
+        actions.addWidget(self.show_original_check)
         self.reveal_in_explorer_check = BoxCheckBox("Show in Explorer after save")
         self.reveal_in_explorer_check.setChecked(True)
         actions.addWidget(self.reveal_in_explorer_check)
         self.ok_button = QPushButton("Save and close")
         self.ok_button.setObjectName("PrimaryButton")
+        self.save_copy_button = QPushButton("Save copy and close")
         self.exit_button = QPushButton("Exit without saving")
         actions.addWidget(self.ok_button)
+        actions.addWidget(self.save_copy_button)
         actions.addWidget(self.exit_button)
         layout.addLayout(actions)
 
@@ -175,6 +207,8 @@ class SidebarPanel(QWidget):
         self.watermark_text_edit.textChanged.connect(emit_document)
         self.font_combo.currentTextChanged.connect(emit_document)
         self.auto_fit_check.toggled.connect(emit_document)
+        self.add_metadata_check.toggled.connect(emit_document)
+        self.metadata_copy_edit.textChanged.connect(emit_document)
 
         self.color_picker.color_changed.connect(emit_controls)
         self.blend_combo.currentIndexChanged.connect(emit_controls)
@@ -191,9 +225,14 @@ class SidebarPanel(QWidget):
         self.delete_selected_btn.clicked.connect(self.delete_selected.emit)
         self.delete_all_btn.clicked.connect(self.delete_all.emit)
         self.ok_button.clicked.connect(self.save_and_close.emit)
+        self.save_copy_button.clicked.connect(self.save_copy_and_close.emit)
         self.exit_button.clicked.connect(self.exit_without_saving.emit)
+        self.show_original_check.toggled.connect(lambda *_: self.preview_mode_changed.emit())
         self.update_now_button.clicked.connect(self.update_now.emit)
         self._update_repeat_spacing_enabled()
+
+    def show_original_preview(self) -> bool:
+        return bool(self.show_original_check.isChecked())
 
     def _update_repeat_spacing_enabled(self):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())
@@ -263,6 +302,8 @@ class SidebarPanel(QWidget):
             repeat_text=tool_defaults.repeat_text,
             repeat_spacing=tool_defaults.repeat_spacing,
             blend_mode=tool_defaults.blend_mode,
+            add_visible_metadata=bool(self.add_metadata_check.isChecked()),
+            metadata_copy_text=self.metadata_copy_edit.text(),
         )
 
     def read_stroke_controls(self) -> dict:

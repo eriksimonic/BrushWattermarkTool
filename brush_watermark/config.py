@@ -40,6 +40,8 @@ DEFAULT_SETTINGS = {
     "repeat_text": False,
     "repeat_spacing": 5,
     "blend_mode": "soft_light",
+    "add_visible_metadata": False,
+    "metadata_copy_text": "",
     "last_image_dir": "",
 }
 

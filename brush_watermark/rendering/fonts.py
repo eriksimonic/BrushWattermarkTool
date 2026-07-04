@@ -30,6 +30,11 @@ def font_candidates() -> dict[str, list[str]]:
             "/System/Library/Fonts/Supplemental/Verdana.ttf",
         ],
         "Tahoma": [r"C:\Windows\Fonts\tahoma.ttf"],
+        "Georgia": [
+            r"C:\Windows\Fonts\georgia.ttf",
+            "/System/Library/Fonts/Supplemental/Georgia.ttf",
+            "/usr/share/fonts/truetype/msttcorefonts/Georgia.ttf",
+        ],
         "DejaVu Sans": ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"],
     }
 

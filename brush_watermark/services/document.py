@@ -15,7 +15,9 @@ from brush_watermark.geometry.points import (
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import blend_mode_short
 from brush_watermark.rendering.colors import color_short
+from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_preview_image
+from brush_watermark.services.exif_metadata import ImageMetadata, read_image_metadata
 
 
 class Document:
@@ -31,6 +33,7 @@ class Document:
         self.settings = settings
         self.original = Image.open(self.image_path).convert("RGB")
         self.full_w, self.full_h = self.original.size
+        self.metadata = read_image_metadata(self.image_path)
 
         self.strokes: list[Stroke] = []
         self.selected_stroke_index = -1
@@ -93,12 +96,37 @@ class Document:
             )
         return scaled
 
+    def metadata_footer_height(self) -> int:
+        if not self.settings.add_visible_metadata:
+            return 0
+        return estimate_footer_height(
+            self.full_w,
+            self.metadata,
+            self.settings.metadata_copy_text,
+        )
+
+    def preview_content_size(self, *, include_metadata: bool) -> tuple[int, int]:
+        height = self.full_h
+        if include_metadata and self.settings.add_visible_metadata:
+            height += self.metadata_footer_height()
+        return self.full_w, height
+
+    def _maybe_append_metadata_footer(self, image: Image.Image) -> Image.Image:
+        if not self.settings.add_visible_metadata:
+            return image
+        return append_metadata_footer(
+            image,
+            self.metadata,
+            self.settings.metadata_copy_text,
+        )
+
     def make_full_composited_image(self) -> Image.Image:
-        return composite_watermark(self.original, self.strokes, self.settings, self.erase_mask)
+        result = composite_watermark(self.original, self.strokes, self.settings, self.erase_mask)
+        return self._maybe_append_metadata_footer(result)
 
     def make_preview_image(self, display_w: int, display_h: int, scale_factor: float) -> Image.Image:
         preview_strokes = self.scaled_strokes(scale_factor)
-        return make_preview_image(
+        preview = make_preview_image(
             self.original,
             display_w,
             display_h,
@@ -107,6 +135,18 @@ class Document:
             self.erase_mask,
             scale_factor,
         )
+        if self.settings.add_visible_metadata:
+            preview = append_metadata_footer(
+                preview.convert("RGB"),
+                self.metadata,
+                self.settings.metadata_copy_text,
+            ).convert("RGBA")
+        return preview
+
+    def make_original_preview_image(self, display_w: int, display_h: int) -> Image.Image:
+        display_w = max(1, int(display_w))
+        display_h = max(1, int(display_h))
+        return self.original.resize((display_w, display_h), Image.Resampling.LANCZOS).convert("RGBA")
 
     def stroke_hit_distance(self, stroke: Stroke, img_x: int, img_y: int) -> Optional[float]:
         points = stroke.points

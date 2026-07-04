@@ -21,6 +21,8 @@ class Settings:
     repeat_text: bool = False
     repeat_spacing: int = 5
     blend_mode: str = DEFAULT_BLEND_MODE
+    add_visible_metadata: bool = False
+    metadata_copy_text: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "Settings":
@@ -39,6 +41,8 @@ class Settings:
             repeat_text=bool(data.get("repeat_text", cls.repeat_text)),
             repeat_spacing=max(0, int(data.get("repeat_spacing", cls.repeat_spacing))),
             blend_mode=normalize_blend_mode(data.get("blend_mode"), cls.blend_mode),
+            add_visible_metadata=bool(data.get("add_visible_metadata", cls.add_visible_metadata)),
+            metadata_copy_text=str(data.get("metadata_copy_text", cls.metadata_copy_text)),
         )
 
     def to_dict(self) -> dict:
@@ -54,6 +58,8 @@ class Settings:
             "repeat_text": self.repeat_text,
             "repeat_spacing": self.repeat_spacing,
             "blend_mode": self.blend_mode,
+            "add_visible_metadata": self.add_visible_metadata,
+            "metadata_copy_text": self.metadata_copy_text,
         }
 
 
@@ -97,3 +103,4 @@ class CanvasView:
     offset_y: float
     last_pointer: Optional[tuple[float, float]] = None
     brush_size: int = 120
+    show_original: bool = False
