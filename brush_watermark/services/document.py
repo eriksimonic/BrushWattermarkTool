@@ -53,7 +53,9 @@ class Document:
             f"{eye}  {stroke.name}  |  len {length}px  |  "
             f"b{stroke.brush_size}  |  s{stroke.opacity}%  |  "
             f"{blend_mode_short(stroke.blend_mode)}  |  #{color}  |  "
-            f"{stroke.angle_offset}°"
+            f"{stroke.angle_offset}°  |  "
+            f"{'repeat' if stroke.repeat_text else 'stretch'}"
+            f"{f' +{stroke.repeat_spacing}' if stroke.repeat_text else ''}"
         )
 
     def text_span_info(self, points: list[Point], brush_size: int):
@@ -63,6 +65,7 @@ class Document:
             self.settings.watermark_text,
             self.settings.font_name,
             self.settings.auto_fit_text,
+            self.settings.repeat_text,
         )
 
     def scaled_strokes(self, scale_factor: float) -> list[Stroke]:
@@ -85,6 +88,8 @@ class Document:
                     text_color=stroke.text_color,
                     angle_offset=stroke.angle_offset,
                     mask_softness=stroke.mask_softness,
+                    repeat_text=stroke.repeat_text,
+                    repeat_spacing=stroke.repeat_spacing,
                 )
             )
         return scaled
@@ -153,6 +158,8 @@ class Document:
         text_color: str,
         angle_offset: int,
         mask_softness: int,
+        repeat_text: bool,
+        repeat_spacing: int,
     ) -> Stroke:
         stroke = Stroke(
             name=f"Stroke {self.stroke_counter}",
@@ -164,6 +171,8 @@ class Document:
             text_color=text_color,
             angle_offset=angle_offset,
             mask_softness=mask_softness,
+            repeat_text=repeat_text,
+            repeat_spacing=repeat_spacing,
         )
         self.stroke_counter += 1
         self.strokes.append(stroke)
@@ -187,6 +196,8 @@ class Document:
         text_color: str,
         angle_offset: int,
         mask_softness: int,
+        repeat_text: bool,
+        repeat_spacing: int,
     ) -> None:
         if 0 <= self.selected_stroke_index < len(self.strokes):
             stroke = self.strokes[self.selected_stroke_index]
@@ -196,6 +207,8 @@ class Document:
             stroke.text_color = text_color
             stroke.angle_offset = angle_offset
             stroke.mask_softness = mask_softness
+            stroke.repeat_text = repeat_text
+            stroke.repeat_spacing = repeat_spacing
 
     def delete_selected_stroke(self) -> None:
         if 0 <= self.selected_stroke_index < len(self.strokes):

@@ -196,6 +196,8 @@ class MainWindow(QMainWindow):
         self.doc.settings.text_color = tool["text_color"]
         self.doc.settings.blend_mode = tool["blend_mode"]
         self.doc.settings.mask_softness = tool["mask_softness"]
+        self.doc.settings.repeat_text = tool["repeat_text"]
+        self.doc.settings.repeat_spacing = tool["repeat_spacing"]
 
     def _layer_selected(self) -> bool:
         return 0 <= self.doc.selected_stroke_index < len(self.doc.strokes)
@@ -400,6 +402,8 @@ class MainWindow(QMainWindow):
                     controls["text_color"],
                     controls["angle_offset"],
                     controls["mask_softness"],
+                    controls["repeat_text"],
+                    controls["repeat_spacing"],
                 )
                 self.refresh_stroke_list()
                 self.select_stroke_by_index(len(self.doc.strokes) - 1, refresh_preview=False)

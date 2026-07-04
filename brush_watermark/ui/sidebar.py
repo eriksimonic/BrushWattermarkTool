@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QPushButton,
     QSlider,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -99,6 +100,18 @@ class SidebarPanel(QWidget):
         self.angle_slider = self._make_slider(-20, 20, settings.angle_offset)
         self.softness_value_label = self._make_field_label("Softness")
         self.softness_slider = self._make_slider(0, 20, settings.mask_softness)
+        self.repeat_text_check = QCheckBox("Repeat text along stroke")
+        self.repeat_text_check.setChecked(settings.repeat_text)
+        self.repeat_spacing_spin = QSpinBox()
+        self.repeat_spacing_spin.setRange(0, 50)
+        self.repeat_spacing_spin.setValue(settings.repeat_spacing)
+        self.repeat_spacing_spin.setToolTip("Space between repeats, in character widths")
+        self.repeat_spacing_spin.setFixedWidth(56)
+        repeat_row = QHBoxLayout()
+        repeat_row.setSpacing(8)
+        repeat_row.addWidget(self.repeat_text_check, 1)
+        repeat_row.addWidget(QLabel("gap"))
+        repeat_row.addWidget(self.repeat_spacing_spin)
 
         self._add_form_row(controls_layout, "Blend", self.blend_combo)
         self._add_slider_row(controls_layout, self.opacity_value_label, self.opacity_slider)
@@ -106,6 +119,7 @@ class SidebarPanel(QWidget):
         controls_layout.addWidget(self.font_size_value_label)
         self._add_slider_row(controls_layout, self.angle_value_label, self.angle_slider)
         self._add_slider_row(controls_layout, self.softness_value_label, self.softness_slider)
+        controls_layout.addLayout(repeat_row)
 
         actions = QVBoxLayout()
         actions.setSpacing(6)
@@ -161,6 +175,9 @@ class SidebarPanel(QWidget):
         self.brush_size_slider.valueChanged.connect(emit_controls)
         self.angle_slider.valueChanged.connect(emit_controls)
         self.softness_slider.valueChanged.connect(emit_controls)
+        self.repeat_text_check.toggled.connect(emit_controls)
+        self.repeat_text_check.toggled.connect(self._update_repeat_spacing_enabled)
+        self.repeat_spacing_spin.valueChanged.connect(emit_controls)
 
         self.stroke_list.currentRowChanged.connect(self.layer_selected.emit)
         self.stroke_list.itemPressed.connect(
@@ -174,6 +191,10 @@ class SidebarPanel(QWidget):
         self.ok_button.clicked.connect(self.save_and_close.emit)
         self.exit_button.clicked.connect(self.exit_without_saving.emit)
         self.update_now_button.clicked.connect(self.update_now.emit)
+        self._update_repeat_spacing_enabled()
+
+    def _update_repeat_spacing_enabled(self):
+        self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())
 
     def set_context_label(self, text: str):
         self.context_label.setText(text)
@@ -186,6 +207,8 @@ class SidebarPanel(QWidget):
             self.brush_size_slider,
             self.angle_slider,
             self.softness_slider,
+            self.repeat_text_check,
+            self.repeat_spacing_spin,
         )
         for widget in widgets:
             widget.blockSignals(block)
@@ -196,11 +219,14 @@ class SidebarPanel(QWidget):
         self.opacity_slider.setValue(settings.opacity)
         self.angle_slider.setValue(settings.angle_offset)
         self.softness_slider.setValue(settings.mask_softness)
+        self.repeat_text_check.setChecked(settings.repeat_text)
+        self.repeat_spacing_spin.setValue(settings.repeat_spacing)
         self.color_picker.set_selected(settings.text_color)
         blend_index = self.blend_combo.findData(settings.blend_mode)
         if blend_index >= 0:
             self.blend_combo.setCurrentIndex(blend_index)
         self._block_control_signals(False)
+        self._update_repeat_spacing_enabled()
         self.set_context_label("Tool defaults")
 
     def load_stroke_controls(self, stroke: Stroke):
@@ -209,11 +235,14 @@ class SidebarPanel(QWidget):
         self.opacity_slider.setValue(stroke.opacity)
         self.angle_slider.setValue(stroke.angle_offset)
         self.softness_slider.setValue(stroke.mask_softness)
+        self.repeat_text_check.setChecked(stroke.repeat_text)
+        self.repeat_spacing_spin.setValue(stroke.repeat_spacing)
         self.color_picker.set_selected(stroke.text_color)
         blend_index = self.blend_combo.findData(stroke.blend_mode)
         if blend_index >= 0:
             self.blend_combo.setCurrentIndex(blend_index)
         self._block_control_signals(False)
+        self._update_repeat_spacing_enabled()
         visibility = "visible" if stroke.visible else "hidden"
         self.set_context_label(f"Layer: {stroke.name} · {visibility}")
 
@@ -227,6 +256,8 @@ class SidebarPanel(QWidget):
             mask_softness=tool_defaults.mask_softness,
             text_color=tool_defaults.text_color,
             auto_fit_text=bool(self.auto_fit_check.isChecked()),
+            repeat_text=tool_defaults.repeat_text,
+            repeat_spacing=tool_defaults.repeat_spacing,
             blend_mode=tool_defaults.blend_mode,
         )
 
@@ -238,6 +269,8 @@ class SidebarPanel(QWidget):
             "text_color": self.color_picker.selected_color(),
             "angle_offset": int(self.angle_slider.value()),
             "mask_softness": int(self.softness_slider.value()),
+            "repeat_text": bool(self.repeat_text_check.isChecked()),
+            "repeat_spacing": int(self.repeat_spacing_spin.value()),
         }
 
     def read_tool_defaults(self) -> dict:

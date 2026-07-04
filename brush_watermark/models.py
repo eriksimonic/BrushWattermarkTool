@@ -18,6 +18,8 @@ class Settings:
     mask_softness: int = 1
     text_color: str = DEFAULT_TEXT_COLOR
     auto_fit_text: bool = True
+    repeat_text: bool = False
+    repeat_spacing: int = 5
     blend_mode: str = DEFAULT_BLEND_MODE
 
     @classmethod
@@ -34,6 +36,8 @@ class Settings:
             mask_softness=int(data.get("mask_softness", cls.mask_softness)),
             text_color=normalize_text_color(data.get("text_color"), cls.text_color),
             auto_fit_text=bool(data.get("auto_fit_text", cls.auto_fit_text)),
+            repeat_text=bool(data.get("repeat_text", cls.repeat_text)),
+            repeat_spacing=max(0, int(data.get("repeat_spacing", cls.repeat_spacing))),
             blend_mode=normalize_blend_mode(data.get("blend_mode"), cls.blend_mode),
         )
 
@@ -47,6 +51,8 @@ class Settings:
             "mask_softness": self.mask_softness,
             "text_color": self.text_color,
             "auto_fit_text": self.auto_fit_text,
+            "repeat_text": self.repeat_text,
+            "repeat_spacing": self.repeat_spacing,
             "blend_mode": self.blend_mode,
         }
 
@@ -61,6 +67,8 @@ class Stroke:
     text_color: str = DEFAULT_TEXT_COLOR
     angle_offset: int = 0
     mask_softness: int = 1
+    repeat_text: bool = False
+    repeat_spacing: int = 5
     visible: bool = True
 
 

@@ -27,6 +27,8 @@ DEFAULT_SETTINGS = {
     "mask_softness": 1,
     "text_color": "#ffffff",
     "auto_fit_text": True,
+    "repeat_text": False,
+    "repeat_spacing": 5,
     "blend_mode": "soft_light",
 }
 

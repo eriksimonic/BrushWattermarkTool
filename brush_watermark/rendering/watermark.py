@@ -15,7 +15,6 @@ from brush_watermark.rendering.blend import composite_watermark_layer, normalize
 from brush_watermark.rendering.colors import parse_rgb
 from brush_watermark.rendering.fonts import (
     FONT_SIZE_RATIO,
-    TEXT_SPAN_FILL,
     font_size_from_brush,
     load_font,
 )
@@ -47,9 +46,15 @@ def fitted_font_size(
         return size
     for candidate in range(size, 9, -1):
         text_w, _, _ = text_dimensions(text, font_name, candidate)
-        if text_w <= length * 0.92:
+        if text_w <= length:
             return candidate
     return 10
+
+
+def space_advance(font) -> float:
+    dummy = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(dummy)
+    return max(1.0, float(draw.textlength(" ", font=font)))
 
 
 def build_glyph_cache(text: str, font, fill: tuple) -> list[tuple[Image.Image, int, float, float]]:
@@ -85,6 +90,7 @@ def compute_text_span(
     text: str,
     font_name: str,
     auto_fit: bool,
+    repeat_text: bool = False,
 ) -> TextSpan | None:
     text = text.strip()
     if not text or len(points) < 2:
@@ -93,14 +99,15 @@ def compute_text_span(
     length = path_length(points)
     if length < 8:
         return None
-    font_size = fitted_font_size(points, brush_size, text, font_name, auto_fit)
+    font_size = fitted_font_size(
+        points, brush_size, text, font_name, auto_fit and not repeat_text
+    )
     font = load_font(font_name, font_size)
     glyphs = build_glyph_cache(text, font, (255, 255, 255, 255))
     base_width = sum(g[1] for g in glyphs)
-    usable_length = length * 0.92
-    used_span = min(usable_length, base_width + max(0.0, (usable_length - base_width) * TEXT_SPAN_FILL))
-    start_d = max(0.0, (length - used_span) / 2.0)
-    end_d = min(length, start_d + used_span)
+    start_d = 0.0
+    end_d = length
+    used_span = length
     sx, sy, _ = point_at_distance(points, start_d)
     ex, ey, _ = point_at_distance(points, end_d)
     return TextSpan(
@@ -144,6 +151,48 @@ def draw_glyph_on_path(
     layer.alpha_composite(rotated, (int(round(x - rcx)), int(round(y - rcy))))
 
 
+def _draw_glyphs_on_path(
+    layer: Image.Image,
+    glyphs: list[tuple[Image.Image, int, float, float]],
+    points: list,
+    length: float,
+    start_d: float,
+    end_d: float,
+    gap_extra: float,
+    angle_offset: int,
+    repeat: bool,
+    repeat_gap: float = 0.0,
+    prev_tangent: float | None = None,
+) -> None:
+    avg_advance = sum(g[1] for g in glyphs) / len(glyphs)
+    half_window = tangent_half_window(avg_advance)
+    pos = start_d
+    while pos < end_d:
+        if repeat and pos > start_d and repeat_gap > 0:
+            if pos + repeat_gap > end_d:
+                return
+            pos += repeat_gap
+        for glyph, advance, anchor_x, anchor_y in glyphs:
+            if pos + advance > end_d:
+                return
+            center_d = pos + advance / 2.0
+            x, y, _ = point_at_distance(points, center_d)
+            tangent = tangent_angle_at_distance(
+                points,
+                center_d,
+                half_window,
+                total_length=length,
+            )
+            if prev_tangent is not None:
+                tangent = angle_unwrap(prev_tangent, tangent)
+            prev_tangent = tangent
+            angle_degrees = glyph_rotation_degrees(tangent, angle_offset)
+            draw_glyph_on_path(layer, glyph, anchor_x, anchor_y, x, y, angle_degrees)
+            pos += advance + gap_extra
+        if not repeat:
+            break
+
+
 def draw_text_on_path(
     layer: Image.Image,
     stroke: Stroke,
@@ -161,8 +210,13 @@ def draw_text_on_path(
     length = path_length(points)
     if length < 8:
         return
+    repeat = stroke.repeat_text
     font_size = fitted_font_size(
-        points, stroke.brush_size, text, settings.font_name, settings.auto_fit_text
+        points,
+        stroke.brush_size,
+        text,
+        settings.font_name,
+        settings.auto_fit_text and not repeat,
     )
     font = load_font(settings.font_name, font_size)
     text_color = stroke.text_color
@@ -172,31 +226,27 @@ def draw_text_on_path(
     if not glyphs:
         return
     base_width = sum(g[1] for g in glyphs)
-    usable_length = length * 0.92
-    used_span = min(usable_length, base_width + max(0.0, (usable_length - base_width) * TEXT_SPAN_FILL))
-    start = max(0.0, (length - used_span) / 2.0)
-    total_extra = max(0.0, used_span - base_width)
-    gap_extra = total_extra / max(1, len(glyphs) - 1)
-    avg_advance = base_width / len(glyphs)
-    half_window = tangent_half_window(avg_advance)
-
-    pos = start
-    prev_tangent: float | None = None
-    for glyph, advance, anchor_x, anchor_y in glyphs:
-        center_d = pos + advance / 2.0
-        x, y, _ = point_at_distance(points, center_d)
-        tangent = tangent_angle_at_distance(
-            points,
-            center_d,
-            half_window,
-            total_length=length,
-        )
-        if prev_tangent is not None:
-            tangent = angle_unwrap(prev_tangent, tangent)
-        prev_tangent = tangent
-        angle_degrees = glyph_rotation_degrees(tangent, stroke.angle_offset)
-        draw_glyph_on_path(layer, glyph, anchor_x, anchor_y, x, y, angle_degrees)
-        pos += advance + gap_extra
+    start = 0.0
+    end = length
+    if repeat:
+        gap_extra = 0.0
+        repeat_gap = max(0, stroke.repeat_spacing) * space_advance(font)
+    else:
+        total_extra = max(0.0, length - base_width)
+        gap_extra = total_extra / max(1, len(glyphs) - 1)
+        repeat_gap = 0.0
+    _draw_glyphs_on_path(
+        layer,
+        glyphs,
+        points,
+        length,
+        start,
+        end,
+        gap_extra,
+        stroke.angle_offset,
+        repeat=repeat,
+        repeat_gap=repeat_gap,
+    )
 
 
 def make_stroke_watermark_layer(

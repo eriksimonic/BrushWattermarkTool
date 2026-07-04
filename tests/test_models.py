@@ -26,6 +26,8 @@ class TestStroke:
     def test_defaults(self):
         s = Stroke(name="S1", points=[(0, 0), (10, 10)], brush_size=30, opacity=50)
         assert s.visible is True
+        assert s.repeat_text is False
+        assert s.repeat_spacing == 5
 
 
 class TestConfigPersistence:
