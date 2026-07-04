@@ -6,7 +6,7 @@ from typing import Optional
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QPixmap
+from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QSizePolicy, QWidget
 
 from brush_watermark import __version__
@@ -17,6 +17,7 @@ from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.auto_update import can_auto_update
 from brush_watermark.services.document import Document
+from brush_watermark.services.explorer_context import MENU_TEXT, install_context_menu, uninstall_context_menu
 from brush_watermark.services.export import build_watermarked_copy_path
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
@@ -63,11 +64,46 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1180, 780)
         self.setStyleSheet(app_stylesheet())
 
+        self._build_menu_bar()
         self._build_ui()
         self._connect_signals()
         self.update_labels()
         self.schedule_preview(1)
         QTimer.singleShot(0, self._start_update_check)
+
+    def _build_menu_bar(self):
+        file_menu = self.menuBar().addMenu("&File")
+
+        save_action = QAction("Save && Close", self)
+        save_action.triggered.connect(lambda _checked=False: self.save_and_close())
+        file_menu.addAction(save_action)
+
+        save_copy_action = QAction("Save Copy && Close", self)
+        save_copy_action.triggered.connect(lambda _checked=False: self.save_copy_and_close())
+        file_menu.addAction(save_copy_action)
+
+        file_menu.addSeparator()
+
+        exit_action = QAction("Exit Without Saving", self)
+        exit_action.triggered.connect(lambda _checked=False: self.exit_without_saving())
+        file_menu.addAction(exit_action)
+
+        tools_menu = self.menuBar().addMenu("&Tools")
+
+        install_explorer_action = QAction(f'Install Explorer "{MENU_TEXT}"', self)
+        install_explorer_action.setEnabled(sys.platform == "win32")
+        install_explorer_action.triggered.connect(lambda _checked=False: self.install_explorer_context_menu())
+        tools_menu.addAction(install_explorer_action)
+
+        uninstall_explorer_action = QAction(f'Remove Explorer "{MENU_TEXT}"', self)
+        uninstall_explorer_action.setEnabled(sys.platform == "win32")
+        uninstall_explorer_action.triggered.connect(lambda _checked=False: self.uninstall_explorer_context_menu())
+        tools_menu.addAction(uninstall_explorer_action)
+
+        help_menu = self.menuBar().addMenu("&Help")
+        about_action = QAction("About", self)
+        about_action.triggered.connect(lambda _checked=False: self.show_about())
+        help_menu.addAction(about_action)
 
     def _build_ui(self):
         central = QWidget()
@@ -168,6 +204,34 @@ class MainWindow(QMainWindow):
             self,
             APP_NAME,
             f"Could not install the update.\n\n{message}",
+        )
+
+    def install_explorer_context_menu(self):
+        try:
+            install_context_menu()
+        except (OSError, RuntimeError) as exc:
+            QMessageBox.critical(self, APP_NAME, f"Could not install Explorer menu.\n\n{exc}")
+            return
+        QMessageBox.information(
+            self,
+            APP_NAME,
+            f'Explorer will now show "{MENU_TEXT}" when you right-click JPG and JPEG files.',
+        )
+
+    def uninstall_explorer_context_menu(self):
+        try:
+            uninstall_context_menu()
+        except (OSError, RuntimeError) as exc:
+            QMessageBox.critical(self, APP_NAME, f"Could not remove Explorer menu.\n\n{exc}")
+            return
+        QMessageBox.information(self, APP_NAME, f'Removed the Explorer "{MENU_TEXT}" menu.')
+
+    def show_about(self):
+        QMessageBox.about(
+            self,
+            APP_NAME,
+            f"{APP_NAME}\nVersion {__version__}\n\n"
+            f'Use Tools > Install Explorer "{MENU_TEXT}" to add a JPG right-click shortcut.',
         )
 
     def _on_pointer_move(self, x: float, y: float):
