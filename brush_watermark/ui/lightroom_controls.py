@@ -181,3 +181,6 @@ class SliderRow(QWidget):
 
     def set_value_text(self, text: str):
         self.value_label.setText(text)
+
+    def set_label(self, name: str):
+        self.name_label.setText(name)

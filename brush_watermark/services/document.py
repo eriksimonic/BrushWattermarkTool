@@ -12,10 +12,11 @@ from brush_watermark.geometry.points import (
     point_segment_distance,
     simplify_points,
 )
-from brush_watermark.models import Settings, Stroke
+from brush_watermark.models import Settings, Stamp, Stroke
 from brush_watermark.rendering.blend import blend_mode_short
 from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_preview_image
+from brush_watermark.services.stamps import list_stamp_svgs, stamp_bounds, stamp_hit_test
 
 
 class Document:
@@ -33,8 +34,11 @@ class Document:
         self.full_w, self.full_h = self.original.size
 
         self.strokes: list[Stroke] = []
+        self.stamps: list[Stamp] = []
         self.selected_stroke_index = -1
+        self.selected_stamp_index = -1
         self.stroke_counter = 1
+        self.stamp_counter = 1
 
         self.erase_mask = Image.new("L", (self.full_w, self.full_h), 0)
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
@@ -44,6 +48,60 @@ class Document:
 
     def visible_strokes(self) -> list[Stroke]:
         return [s for s in self.strokes if s.visible]
+
+    def visible_stamps(self) -> list[Stamp]:
+        return [s for s in self.stamps if s.visible]
+
+    def layer_count(self) -> int:
+        return len(self.strokes) + len(self.stamps)
+
+    def is_stroke_row(self, row: int) -> bool:
+        return 0 <= row < len(self.strokes)
+
+    def is_stamp_row(self, row: int) -> bool:
+        return len(self.strokes) <= row < self.layer_count()
+
+    def row_to_stroke_index(self, row: int) -> int:
+        return row
+
+    def row_to_stamp_index(self, row: int) -> int:
+        return row - len(self.strokes)
+
+    def stroke_row(self, stroke_index: int) -> int:
+        return stroke_index
+
+    def stamp_row(self, stamp_index: int) -> int:
+        return len(self.strokes) + stamp_index
+
+    def has_selection(self) -> bool:
+        return self.selected_stroke_index >= 0 or self.selected_stamp_index >= 0
+
+    def clear_selection(self) -> None:
+        self.selected_stroke_index = -1
+        self.selected_stamp_index = -1
+
+    def select_stroke(self, index: int) -> None:
+        if index < 0 or index >= len(self.strokes):
+            self.selected_stroke_index = -1
+            return
+        self.selected_stroke_index = index
+        self.selected_stamp_index = -1
+
+    def select_stamp(self, index: int) -> None:
+        if index < 0 or index >= len(self.stamps):
+            self.selected_stamp_index = -1
+            return
+        self.selected_stamp_index = index
+        self.selected_stroke_index = -1
+
+    def select_layer_row(self, row: int) -> None:
+        if row < 0:
+            self.clear_selection()
+            return
+        if self.is_stroke_row(row):
+            self.select_stroke(self.row_to_stroke_index(row))
+        elif self.is_stamp_row(row):
+            self.select_stamp(self.row_to_stamp_index(row))
 
     def stroke_list_text(self, idx: int, stroke: Stroke) -> str:
         eye = "👁" if stroke.visible else "🚫"
@@ -56,6 +114,22 @@ class Document:
             f"{'repeat' if stroke.repeat_text else 'stretch'}"
             f"{f' +{stroke.repeat_spacing}' if stroke.repeat_text else ''}"
         )
+
+    def stamp_list_text(self, idx: int, stamp: Stamp) -> str:
+        eye = "👁" if stamp.visible else "🚫"
+        color = color_short(stamp.tint_color) if stamp.tint_color else "svg"
+        return (
+            f"{eye}  {stamp.name}  |  {stamp.svg_name}  |  "
+            f"h{stamp.size}  |  s{stamp.opacity}%  |  "
+            f"{blend_mode_short(stamp.blend_mode)}  |  #{color}"
+        )
+
+    def layer_list_text(self, row: int) -> str:
+        if self.is_stroke_row(row):
+            idx = self.row_to_stroke_index(row)
+            return self.stroke_list_text(idx, self.strokes[idx])
+        idx = self.row_to_stamp_index(row)
+        return self.stamp_list_text(idx, self.stamps[idx])
 
     def text_span_info(self, points: list[Point], brush_size: int):
         return compute_text_span(
@@ -93,11 +167,34 @@ class Document:
             )
         return scaled
 
+    def scaled_stamps(self, scale_factor: float) -> list[Stamp]:
+        if abs(scale_factor - 1.0) < 0.0001:
+            return list(self.stamps)
+        scaled = []
+        for stamp in self.stamps:
+            scaled.append(
+                Stamp(
+                    name=stamp.name,
+                    visible=stamp.visible,
+                    svg_name=stamp.svg_name,
+                    x=int(round(stamp.x * scale_factor)),
+                    y=int(round(stamp.y * scale_factor)),
+                    size=max(1, int(round(stamp.size * scale_factor))),
+                    opacity=stamp.opacity,
+                    blend_mode=stamp.blend_mode,
+                    tint_color=stamp.tint_color,
+                )
+            )
+        return scaled
+
     def make_full_composited_image(self) -> Image.Image:
-        return composite_watermark(self.original, self.strokes, self.settings, self.erase_mask)
+        return composite_watermark(
+            self.original, self.strokes, self.settings, self.erase_mask, self.stamps
+        )
 
     def make_preview_image(self, display_w: int, display_h: int, scale_factor: float) -> Image.Image:
         preview_strokes = self.scaled_strokes(scale_factor)
+        preview_stamps = self.scaled_stamps(scale_factor)
         return make_preview_image(
             self.original,
             display_w,
@@ -106,6 +203,7 @@ class Document:
             self.settings,
             self.erase_mask,
             scale_factor,
+            preview_stamps,
         )
 
     def stroke_hit_distance(self, stroke: Stroke, img_x: int, img_y: int) -> Optional[float]:
@@ -148,6 +246,78 @@ class Document:
                 best_idx = idx
         return best_idx
 
+    def find_stamp_at_point(self, img_x: int, img_y: int, extra_tol: float = 8.0) -> int:
+        best_idx = -1
+        best_area = None
+        for idx in range(len(self.stamps) - 1, -1, -1):
+            stamp = self.stamps[idx]
+            if not stamp.visible:
+                continue
+            if not stamp_hit_test(stamp, img_x, img_y, extra_tol):
+                continue
+            left, top, right, bottom = stamp_bounds(stamp.svg_name, stamp.x, stamp.y, stamp.size)
+            area = (right - left) * (bottom - top)
+            if best_area is None or area <= best_area:
+                best_area = area
+                best_idx = idx
+        return best_idx
+
+    def point_near_stamp(self, index: int, img_x: int, img_y: int, extra_tol: float = 0.0) -> bool:
+        if index < 0 or index >= len(self.stamps):
+            return False
+        stamp = self.stamps[index]
+        if not stamp.visible:
+            return False
+        return stamp_hit_test(stamp, img_x, img_y, extra_tol)
+
+    def add_stamp(
+        self,
+        svg_name: str,
+        x: int,
+        y: int,
+        size: int,
+        opacity: int,
+        blend_mode: str,
+        tint_color: str | None,
+    ) -> Stamp:
+        stamp = Stamp(
+            name=f"Stamp {self.stamp_counter}",
+            visible=True,
+            svg_name=svg_name,
+            x=x,
+            y=y,
+            size=size,
+            opacity=opacity,
+            blend_mode=blend_mode,
+            tint_color=tint_color,
+        )
+        self.stamp_counter += 1
+        self.stamps.append(stamp)
+        return stamp
+
+    def move_selected_stamp(self, dx: int, dy: int) -> None:
+        if 0 <= self.selected_stamp_index < len(self.stamps):
+            stamp = self.stamps[self.selected_stamp_index]
+            stamp.x += dx
+            stamp.y += dy
+
+    def update_selected_stamp(
+        self,
+        size: int,
+        opacity: int,
+        blend_mode: str,
+        tint_color: str | None,
+        svg_name: str | None = None,
+    ) -> None:
+        if 0 <= self.selected_stamp_index < len(self.stamps):
+            stamp = self.stamps[self.selected_stamp_index]
+            stamp.size = size
+            stamp.opacity = opacity
+            stamp.blend_mode = blend_mode
+            stamp.tint_color = tint_color
+            if svg_name:
+                stamp.svg_name = svg_name
+
     def add_stroke(
         self,
         points: list[Point],
@@ -181,12 +351,6 @@ class Document:
         cleaned = simplify_points(raw_points, min_dist=max(2.0, brush_size * 0.010))
         return chaikin_smooth(cleaned, iterations=3)
 
-    def select_stroke(self, index: int) -> None:
-        if index < 0 or index >= len(self.strokes):
-            self.selected_stroke_index = -1
-            return
-        self.selected_stroke_index = index
-
     def update_selected_stroke(
         self,
         brush_size: int,
@@ -209,6 +373,16 @@ class Document:
             stroke.repeat_text = repeat_text
             stroke.repeat_spacing = repeat_spacing
 
+    def delete_selected_layer(self) -> None:
+        if 0 <= self.selected_stamp_index < len(self.stamps):
+            del self.stamps[self.selected_stamp_index]
+            if self.stamps:
+                self.selected_stamp_index = min(self.selected_stamp_index, len(self.stamps) - 1)
+            else:
+                self.selected_stamp_index = -1
+            return
+        self.delete_selected_stroke()
+
     def delete_selected_stroke(self) -> None:
         if 0 <= self.selected_stroke_index < len(self.strokes):
             del self.strokes[self.selected_stroke_index]
@@ -219,10 +393,17 @@ class Document:
 
     def clear_all(self) -> None:
         self.strokes = []
+        self.stamps = []
         self.current_points = []
-        self.selected_stroke_index = -1
+        self.clear_selection()
         self.erase_mask = Image.new("L", (self.full_w, self.full_h), 0)
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
+
+    def default_stamp_name(self) -> str:
+        names = list_stamp_svgs()
+        if self.settings.stamp_name in names:
+            return self.settings.stamp_name
+        return names[0] if names else ""
 
     def add_erase_to_mask(self, img_x: int, img_y: int) -> None:
         size = self.settings.brush_size

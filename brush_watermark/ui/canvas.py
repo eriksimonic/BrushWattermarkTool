@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView
+from brush_watermark.services.stamps import render_stamp_rgba, stamp_bounds
 from brush_watermark.ui.design_tokens import CANVAS_BG, HANDLE
 
 if TYPE_CHECKING:
@@ -109,6 +110,41 @@ class CanvasWidget(QWidget):
         p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         p.drawText(QPointF(scx + 6, scy - 8), label)
 
+    def _draw_stamp_selection_guide(self, p: QPainter, stamp, label: str):
+        left, top, right, bottom = stamp_bounds(stamp.svg_name, stamp.x, stamp.y, stamp.size)
+        x0, y0 = self._image_to_canvas(left, top)
+        x1, y1 = self._image_to_canvas(right, bottom)
+        guide_color = QColor(HANDLE)
+        guide_color.setAlpha(180)
+        p.setPen(QPen(guide_color, 1, Qt.DashLine))
+        p.setBrush(Qt.NoBrush)
+        p.drawRect(int(min(x0, x1)), int(min(y0, y1)), int(abs(x1 - x0)), int(abs(y1 - y0)))
+        p.setPen(guide_color)
+        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        p.drawText(QPointF(x0 + 4, y0 - 4), label)
+
+    def _draw_stamp_preview(self, p: QPainter, view: CanvasView, svg_name: str, img_x: int, img_y: int, size: int, alpha: int = 120):
+        if not svg_name:
+            return
+        stamp_image = render_stamp_rgba(svg_name, size, None)
+        if stamp_image.getbbox() is None:
+            return
+        left = img_x
+        top = img_y - stamp_image.height
+        cx, cy = self._image_to_canvas(left, top)
+        width = max(1, int(stamp_image.width * view.scale))
+        height = max(1, int(stamp_image.height * view.scale))
+        from PIL.ImageQt import ImageQt
+        from PySide6.QtGui import QPixmap
+
+        qimage = ImageQt(stamp_image)
+        pixmap = QPixmap.fromImage(qimage).scaled(
+            width, height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        )
+        p.setOpacity(alpha / 255.0)
+        p.drawPixmap(int(cx), int(cy), pixmap)
+        p.setOpacity(1.0)
+
     def _draw_span_guide(self, p: QPainter, span_info):
         points = span_info.points
         start_d = span_info.start_d
@@ -142,6 +178,10 @@ class CanvasWidget(QWidget):
             stroke = view.strokes[view.selected_stroke_index]
             self._draw_stroke_selection_guide(p, stroke.points, stroke.name)
 
+        if 0 <= view.selected_stamp_index < len(view.stamps):
+            stamp = view.stamps[view.selected_stamp_index]
+            self._draw_stamp_selection_guide(p, stamp, stamp.name)
+
         if len(view.current_points) >= 2:
             smooth = smooth_path_for_text(view.current_points)
             smooth = normalize_text_direction(smooth)
@@ -156,6 +196,11 @@ class CanvasWidget(QWidget):
             return
         x, y = view.last_pointer
         if not self._inside_image(x, y):
+            return
+        if view.tool_mode == "stamp" and view.selected_stamp_index < 0 and view.stamp_preview_svg:
+            img_x = int((x - view.offset_x) / max(view.scale, 0.0001))
+            img_y = int((y - view.offset_y) / max(view.scale, 0.0001))
+            self._draw_stamp_preview(p, view, view.stamp_preview_svg, img_x, img_y, view.stamp_size)
             return
         radius = max(1.0, int(view.brush_size) * max(view.scale, 0.0001) / 2)
         p.setPen(QPen(QColor("#facc15"), 2))

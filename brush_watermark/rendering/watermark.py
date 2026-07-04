@@ -12,7 +12,8 @@ from brush_watermark.geometry.path_text import (
     tangent_half_window,
 )
 from brush_watermark.geometry.points import clamp, normalize_text_direction, path_length
-from brush_watermark.models import Settings, Stroke, TextSpan
+from brush_watermark.models import Settings, Stamp, Stroke, TextSpan
+from brush_watermark.rendering.stamp import composite_stamps_onto
 from brush_watermark.rendering.blend import composite_watermark_layer, normalize_blend_mode
 from brush_watermark.rendering.colors import parse_rgb
 from brush_watermark.rendering.fonts import (
@@ -324,8 +325,10 @@ def composite_strokes_onto(base: Image.Image, strokes: list[Stroke], settings: S
     return result
 
 
-def composite_watermark(base: Image.Image, strokes: list[Stroke], settings: Settings, erase_mask: Image.Image) -> Image.Image:
+def composite_watermark(base: Image.Image, strokes: list[Stroke], settings: Settings, erase_mask: Image.Image, stamps: list[Stamp] | None = None) -> Image.Image:
     result = composite_strokes_onto(base, strokes, settings, erase_mask, 1.0)
+    if stamps:
+        result = composite_stamps_onto(result, stamps, settings, erase_mask, 1.0)
     return result.convert("RGB")
 
 
@@ -337,10 +340,14 @@ def make_preview_image(
     settings: Settings,
     erase_mask: Image.Image,
     scale_factor: float,
+    stamps: list[Stamp] | None = None,
 ) -> Image.Image:
     display_w = max(1, int(display_w))
     display_h = max(1, int(display_h))
     preview_base = original.resize((display_w, display_h), Image.Resampling.LANCZOS).convert("RGBA")
-    return composite_strokes_onto(
+    result = composite_strokes_onto(
         preview_base, strokes, settings, erase_mask, scale_factor
-    ).convert("RGBA")
+    )
+    if stamps:
+        result = composite_stamps_onto(result, stamps, settings, erase_mask, scale_factor)
+    return result.convert("RGBA")

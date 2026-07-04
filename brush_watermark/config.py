@@ -7,13 +7,20 @@ APP_NAME = "Brush Watermark"
 APP_SLUG = "BrushWatermark"
 
 
+def _bundle_base() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "brush_watermark"
+    return Path(__file__).resolve().parent
+
+
 def app_icon_path() -> Path:
     """Path to the app icon PNG (source tree or PyInstaller bundle)."""
-    if getattr(sys, "frozen", False):
-        base = Path(sys._MEIPASS) / "brush_watermark"
-    else:
-        base = Path(__file__).resolve().parent
-    return base / "assets" / "icon.png"
+    return _bundle_base() / "assets" / "icon.png"
+
+
+def stamps_dir() -> Path:
+    """Directory containing bundled SVG stamp files."""
+    return _bundle_base() / "assets" / "stamps"
 GITHUB_REPO = "eriksimonic/BrushWattermarkTool"
 GITHUB_BRANCH = "main"
 VERSION_RAW_URL = (
@@ -40,6 +47,10 @@ DEFAULT_SETTINGS = {
     "repeat_text": False,
     "repeat_spacing": 5,
     "blend_mode": "soft_light",
+    "tool_mode": "paint",
+    "stamp_name": "",
+    "stamp_size": 120,
+    "use_svg_colors": True,
     "last_image_dir": "",
 }
 

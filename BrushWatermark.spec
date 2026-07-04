@@ -15,7 +15,7 @@ _PYSIDE6_UNUSED = [
         "QtPrintSupport", "QtQml", "QtQuick", "QtQuick3D", "QtQuickControls2",
         "QtQuickTest", "QtQuickWidgets", "QtRemoteObjects", "QtScxml", "QtSensors",
         "QtSerialBus", "QtSerialPort", "QtSpatialAudio", "QtSql", "QtStateMachine",
-        "QtSvg", "QtSvgWidgets", "QtTest", "QtTextToSpeech", "QtUiTools",
+        "QtSvgWidgets", "QtTest", "QtTextToSpeech", "QtUiTools",
         "QtWebChannel", "QtWebEngineCore", "QtWebEngineQuick", "QtWebEngineWidgets",
         "QtWebSockets", "QtWebView", "QtXml",
     )
@@ -78,7 +78,10 @@ a = Analysis(
     ["brush_watermark/__main__.py"],
     pathex=[],
     binaries=[],
-    datas=[("brush_watermark/assets/icon.png", "brush_watermark/assets")],
+    datas=[
+        ("brush_watermark/assets/icon.png", "brush_watermark/assets"),
+        ("brush_watermark/assets/stamps", "brush_watermark/assets/stamps"),
+    ],
     hiddenimports=["PIL.ImageQt"],
     hookspath=[],
     hooksconfig={},

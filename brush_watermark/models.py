@@ -1,11 +1,13 @@
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
+from typing import Literal, Optional
 
 from brush_watermark.geometry.points import Point
 
 
 DEFAULT_BLEND_MODE = "soft_light"
 DEFAULT_TEXT_COLOR = "#ffffff"
+ToolMode = Literal["paint", "stamp"]
+LayerKind = Literal["stroke", "stamp"]
 
 
 @dataclass
@@ -21,6 +23,10 @@ class Settings:
     repeat_text: bool = False
     repeat_spacing: int = 5
     blend_mode: str = DEFAULT_BLEND_MODE
+    tool_mode: ToolMode = "paint"
+    stamp_name: str = ""
+    stamp_size: int = 120
+    use_svg_colors: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "Settings":
@@ -39,6 +45,10 @@ class Settings:
             repeat_text=bool(data.get("repeat_text", cls.repeat_text)),
             repeat_spacing=max(0, int(data.get("repeat_spacing", cls.repeat_spacing))),
             blend_mode=normalize_blend_mode(data.get("blend_mode"), cls.blend_mode),
+            tool_mode=_normalize_tool_mode(data.get("tool_mode"), cls.tool_mode),
+            stamp_name=str(data.get("stamp_name", cls.stamp_name)),
+            stamp_size=int(data.get("stamp_size", cls.stamp_size)),
+            use_svg_colors=bool(data.get("use_svg_colors", cls.use_svg_colors)),
         )
 
     def to_dict(self) -> dict:
@@ -54,7 +64,18 @@ class Settings:
             "repeat_text": self.repeat_text,
             "repeat_spacing": self.repeat_spacing,
             "blend_mode": self.blend_mode,
+            "tool_mode": self.tool_mode,
+            "stamp_name": self.stamp_name,
+            "stamp_size": self.stamp_size,
+            "use_svg_colors": self.use_svg_colors,
         }
+
+
+def _normalize_tool_mode(value: object, fallback: ToolMode) -> ToolMode:
+    mode = str(value or fallback).strip().lower()
+    if mode in ("paint", "stamp"):
+        return mode  # type: ignore[return-value]
+    return fallback
 
 
 @dataclass
@@ -69,6 +90,19 @@ class Stroke:
     mask_softness: int = 1
     repeat_text: bool = False
     repeat_spacing: int = 5
+    visible: bool = True
+
+
+@dataclass
+class Stamp:
+    name: str
+    svg_name: str
+    x: int
+    y: int
+    size: int
+    opacity: int
+    blend_mode: str = DEFAULT_BLEND_MODE
+    tint_color: str | None = None
     visible: bool = True
 
 
@@ -89,7 +123,10 @@ class CanvasView:
     """Read-only snapshot for painting the canvas overlay."""
 
     strokes: list[Stroke]
+    stamps: list[Stamp]
     selected_stroke_index: int
+    selected_stamp_index: int
+    tool_mode: ToolMode
     current_points: list[Point]
     current_brush_size: int
     scale: float
@@ -97,3 +134,7 @@ class CanvasView:
     offset_y: float
     last_pointer: Optional[tuple[float, float]] = None
     brush_size: int = 120
+    stamp_size: int = 120
+    selected_stamp_svg: str = ""
+    stamp_preview_svg: str = ""
+    dragging_stamp: bool = False

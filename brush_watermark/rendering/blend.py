@@ -79,6 +79,37 @@ def overlay_rgb_layer(size: tuple[int, int], text_color: str) -> Image.Image:
     return Image.new("RGB", size, parse_rgb(text_color))
 
 
+def composite_rgba_layer(
+    base: Image.Image,
+    layer_rgba: Image.Image,
+    blend_mode: str,
+    strength: float,
+) -> Image.Image:
+    mode = normalize_blend_mode(blend_mode)
+    strength = max(0.0, min(1.0, strength))
+    if strength <= 0.0:
+        return base.convert("RGBA")
+
+    alpha = layer_rgba.getchannel("A")
+    if alpha.getbbox() is None:
+        return base.convert("RGBA")
+
+    result = base.convert("RGBA")
+    weight = _scaled_mask(alpha, strength)
+
+    if mode == "normal":
+        tinted = layer_rgba.copy()
+        tinted.putalpha(weight)
+        result.alpha_composite(tinted)
+        return result
+
+    base_rgb = result.convert("RGB")
+    overlay_rgb = layer_rgba.convert("RGB")
+    blended_rgb = _blend_rgb(base_rgb, overlay_rgb, mode)
+    mixed_rgb = Image.composite(blended_rgb, base_rgb, weight)
+    return Image.merge("RGBA", (*mixed_rgb.split(), result.getchannel("A")))
+
+
 def composite_watermark_layer(
     base: Image.Image,
     watermark_rgba: Image.Image,
