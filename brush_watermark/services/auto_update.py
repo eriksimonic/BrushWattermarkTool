@@ -112,23 +112,37 @@ def build_updater_script(
         else ""
     )
 
+    log_path = script_dir / f"apply-update-{process_id}.log"
     script = f"""$ErrorActionPreference = 'Stop'
+$log = "{log_path}"
+function Write-Log($message) {{
+    "$(Get-Date -Format o) $message" | Out-File -FilePath $log -Append -Encoding utf8
+}}
+Write-Log "waiting for pid {process_id}"
 try {{
     Wait-Process -Id {process_id} -ErrorAction SilentlyContinue
 }} catch {{}}
 Start-Sleep -Seconds 2
-& robocopy "{source_dir}" "{target_dir}" /E /IS /IT /R:5 /W:2 /NFL /NDL /NJH /NJS | Out-Null
-if ($LASTEXITCODE -ge 8) {{ exit 1 }}
+Write-Log "copying from {source_dir}"
+& robocopy "{source_dir}" "{target_dir}" /E /IS /IT /R:5 /W:2 /NFL /NDL /NJH /NJS *>> $log
+$code = $LASTEXITCODE
+Write-Log "robocopy exit=$code"
+if ($code -ge 8) {{ exit 1 }}
+Write-Log "restarting app"
 Start-Process -FilePath "{exe_path}" -WorkingDirectory "{target_dir}" {start_args}
+Write-Log "done"
 """
     script_path.write_text(script, encoding="utf-8")
     return script_path
 
 
 def launch_updater(script_path: Path) -> None:
+    # NOTE: Do NOT use DETACHED_PROCESS here. When the app hard-exits (os._exit)
+    # immediately after launching the updater, a DETACHED_PROCESS child is torn
+    # down before it can run, so the update is never applied. CREATE_NO_WINDOW
+    # hides the console while letting the child outlive the parent.
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     if sys.platform == "win32":
-        creationflags |= getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
         creationflags |= 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
 
     subprocess.Popen(
