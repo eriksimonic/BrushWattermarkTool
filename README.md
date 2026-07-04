@@ -91,7 +91,7 @@ pytest
 
 ## Releases
 
-Pushing to `main` triggers the GitHub Actions release workflow: tests, bump the minor version, build `BrushWatermark.zip` with that version embedded, publish the GitHub release, then commit the version back to `main`. The app checks GitHub at startup; packaged Windows builds also offer a **Download and install update** button when a newer release is available.
+Pushing Python changes (`.py` files) to `main` triggers the GitHub Actions release workflow: tests, bump the minor version, build `BrushWatermark.zip` with that version embedded, publish the GitHub release, then commit the version back to `main`. Pushes that only change other files (docs, config, assets, etc.) do not create a release. The app checks GitHub at startup; packaged Windows builds also offer a **Download and install update** button when a newer release is available.
 
 ---
 
