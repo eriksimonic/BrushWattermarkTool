@@ -441,11 +441,11 @@ class MainWindow(QMainWindow):
 
     def delete_selected_stroke(self):
         self.doc.delete_selected_stroke()
+        self.refresh_stroke_list()
         if self.doc.strokes:
             self.select_stroke_by_index(self.doc.selected_stroke_index, refresh_preview=False)
         else:
             self.select_stroke_by_index(-1, refresh_preview=False)
-            self.refresh_stroke_list()
         self.schedule_preview()
 
     def clear_all(self):
