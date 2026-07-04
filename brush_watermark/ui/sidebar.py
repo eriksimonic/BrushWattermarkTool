@@ -23,8 +23,6 @@ from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, Sl
 class SidebarPanel(QWidget):
     document_settings_changed = Signal()
     stroke_controls_changed = Signal()
-    layer_selected = Signal(int)
-    layer_item_pressed = Signal(int)
     layer_item_clicked = Signal(int)
     delete_selected = Signal()
     delete_all = Signal()
@@ -187,10 +185,6 @@ class SidebarPanel(QWidget):
         self.repeat_text_check.toggled.connect(self._update_repeat_spacing_enabled)
         self.repeat_spacing_spin.valueChanged.connect(emit_controls)
 
-        self.stroke_list.currentRowChanged.connect(self.layer_selected.emit)
-        self.stroke_list.itemPressed.connect(
-            lambda item: self.layer_item_pressed.emit(self.stroke_list.row(item))
-        )
         self.stroke_list.itemClicked.connect(
             lambda item: self.layer_item_clicked.emit(self.stroke_list.row(item))
         )

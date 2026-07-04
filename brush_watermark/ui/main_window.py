@@ -52,7 +52,6 @@ class MainWindow(QMainWindow):
         self.left_press_img_xy = None
         self.left_press_candidate = -1
         self.left_press_on_selected = False
-        self._list_toggle_row = -1
         self._ignore_list_selection = False
         self._update_checker: UpdateChecker | None = None
         self._auto_updater: AutoUpdater | None = None
@@ -107,8 +106,6 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         self.sidebar.document_settings_changed.connect(self.document_settings_changed)
         self.sidebar.stroke_controls_changed.connect(self.stroke_controls_changed)
-        self.sidebar.layer_selected.connect(self.on_layer_selected)
-        self.sidebar.layer_item_pressed.connect(self.on_layer_item_pressed)
         self.sidebar.layer_item_clicked.connect(self.on_layer_item_clicked)
         self.sidebar.delete_selected.connect(self.delete_selected_stroke)
         self.sidebar.delete_all.connect(self.clear_all)
@@ -255,34 +252,13 @@ class MainWindow(QMainWindow):
         self.sidebar.stroke_list.blockSignals(False)
         self.sync_list_selection()
 
-    def on_layer_selected(self, index: int):
-        if self._ignore_list_selection:
-            return
-        if index < 0:
-            if self.doc.selected_stroke_index >= 0:
-                self.select_stroke_by_index(-1)
-            return
-        if index == self.doc.selected_stroke_index:
-            return
-        self.select_stroke_by_index(index)
-
-    def on_layer_item_pressed(self, row: int):
-        if row < 0:
+    def on_layer_item_clicked(self, row: int):
+        if self._ignore_list_selection or row < 0:
             return
         if row == self.doc.selected_stroke_index:
-            self._list_toggle_row = row
-            return
-        self._list_toggle_row = -1
-        self.select_stroke_by_index(row)
-
-    def on_layer_item_clicked(self, row: int):
-        if self._ignore_list_selection:
-            return
-        if row >= 0 and row == self._list_toggle_row and row == self.doc.selected_stroke_index:
-            self._list_toggle_row = -1
             self.select_stroke_by_index(-1)
-            return
-        self._list_toggle_row = -1
+        else:
+            self.select_stroke_by_index(row)
 
     def clear_left_interaction(self):
         self.doc.current_points = []
