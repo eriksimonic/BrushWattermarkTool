@@ -60,6 +60,36 @@ def chaikin_smooth(points: list[Point], iterations: int = 3) -> list[Point]:
     return [(int(round(x)), int(round(y))) for x, y in smoothed]
 
 
+def find_anchor_index(points: list[Point], x: float, y: float, tol: float = 12.0) -> int:
+    """Return the index of the nearest point within tol, or -1."""
+    best_idx = -1
+    best_dist = None
+    for i, (px, py) in enumerate(points):
+        d = math.hypot(x - px, y - py)
+        if d <= tol and (best_dist is None or d < best_dist):
+            best_dist = d
+            best_idx = i
+    return best_idx
+
+
+def find_segment_for_insert(points: list[Point], x: float, y: float, tol: float = 12.0) -> int:
+    """Return the index of the segment (by its start point) closest to (x, y) within tol.
+
+    Inserting after segment_index places a new point between points[i] and points[i+1].
+    Returns -1 if no segment is close enough.
+    """
+    best_idx = -1
+    best_dist = None
+    for i in range(len(points) - 1):
+        ax, ay = points[i]
+        bx, by = points[i + 1]
+        d = point_segment_distance(x, y, ax, ay, bx, by)
+        if d <= tol and (best_dist is None or d < best_dist):
+            best_dist = d
+            best_idx = i
+    return best_idx
+
+
 def normalize_text_direction(points: list[Point]) -> list[Point]:
     if len(points) < 2:
         return points

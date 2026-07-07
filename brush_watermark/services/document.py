@@ -220,8 +220,34 @@ class Document:
         return stroke
 
     def finalize_stroke_points(self, raw_points: list[Point], brush_size: int) -> list[Point]:
-        cleaned = simplify_points(raw_points, min_dist=max(2.0, brush_size * 0.010))
-        return chaikin_smooth(cleaned, iterations=3)
+        # Store only simplified anchor points; smooth_path_for_text handles smoothing at render time.
+        return simplify_points(raw_points, min_dist=max(2.0, brush_size * 0.010))
+
+    def append_to_stroke(self, index: int, new_points: list[Point]) -> None:
+        """Append new_points to an existing stroke, simplifying the junction."""
+        if index < 0 or index >= len(self.strokes):
+            return
+        stroke = self.strokes[index]
+        combined = stroke.points + new_points
+        stroke.points = simplify_points(combined, min_dist=max(2.0, stroke.brush_size * 0.010))
+
+    def move_anchor(self, stroke_index: int, anchor_index: int, xy: Point) -> None:
+        if 0 <= stroke_index < len(self.strokes):
+            stroke = self.strokes[stroke_index]
+            if 0 <= anchor_index < len(stroke.points):
+                stroke.points[anchor_index] = xy
+
+    def insert_anchor(self, stroke_index: int, segment_index: int, xy: Point) -> None:
+        if 0 <= stroke_index < len(self.strokes):
+            stroke = self.strokes[stroke_index]
+            if 0 <= segment_index < len(stroke.points) - 1:
+                stroke.points.insert(segment_index + 1, xy)
+
+    def delete_anchor(self, stroke_index: int, anchor_index: int) -> None:
+        if 0 <= stroke_index < len(self.strokes):
+            stroke = self.strokes[stroke_index]
+            if len(stroke.points) > 2 and 0 <= anchor_index < len(stroke.points):
+                del stroke.points[anchor_index]
 
     def select_stroke(self, index: int) -> None:
         if index < 0 or index >= len(self.strokes):

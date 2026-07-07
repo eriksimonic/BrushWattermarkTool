@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional
 
 from brush_watermark.geometry.points import Point
@@ -6,6 +7,12 @@ from brush_watermark.geometry.points import Point
 
 DEFAULT_BLEND_MODE = "soft_light"
 DEFAULT_TEXT_COLOR = "#ffffff"
+
+
+class ToolMode(str, Enum):
+    POINTER = "pointer"
+    BRUSH = "brush"
+    PATH = "path"
 
 
 @dataclass
@@ -104,3 +111,6 @@ class CanvasView:
     last_pointer: Optional[tuple[float, float]] = None
     brush_size: int = 120
     show_original: bool = False
+    active_tool: ToolMode = ToolMode.BRUSH
+    line_start_xy: Optional[Point] = None
+    selected_anchor_index: int = -1

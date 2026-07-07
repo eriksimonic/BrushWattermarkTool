@@ -1,12 +1,12 @@
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen, QWheelEvent
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
-from brush_watermark.models import CanvasView
+from brush_watermark.models import CanvasView, ToolMode
 from brush_watermark.ui.design_tokens import CANVAS_BG, HANDLE
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ class CanvasWidget(QWidget):
         on_pointer_move: Callable[[float, float], None],
         on_pointer_leave: Callable[[], None],
         text_span_info: Callable[[list, int], Optional[Any]],
+        on_double_click: Callable[[float, float], None] = lambda x, y: None,
         preview_pixmap=None,
     ):
         super().__init__()
@@ -45,6 +46,7 @@ class CanvasWidget(QWidget):
         self._on_pointer_move = on_pointer_move
         self._on_pointer_leave = on_pointer_leave
         self._text_span_info = text_span_info
+        self._on_double_click = on_double_click
         self.preview_pixmap = preview_pixmap
 
         self.setMouseTracking(True)
@@ -141,7 +143,10 @@ class CanvasWidget(QWidget):
     def _draw_overlay(self, p: QPainter, view: CanvasView):
         if 0 <= view.selected_stroke_index < len(view.strokes):
             stroke = view.strokes[view.selected_stroke_index]
-            self._draw_stroke_selection_guide(p, stroke.points, stroke.name)
+            if view.active_tool == ToolMode.PATH:
+                self._draw_anchor_handles(p, view, stroke)
+            else:
+                self._draw_stroke_selection_guide(p, stroke.points, stroke.name)
 
         if len(view.current_points) >= 2:
             smooth = smooth_path_for_text(view.current_points)
@@ -152,7 +157,41 @@ class CanvasWidget(QWidget):
             if span_info:
                 self._draw_span_guide(p, span_info)
 
+        if view.active_tool == ToolMode.BRUSH:
+            self._draw_line_rubber_band(p, view)
+
+    def _draw_anchor_handles(self, p: QPainter, view: CanvasView, stroke):
+        """Draw polyline + square handles for path anchor editing."""
+        points = stroke.points
+        if len(points) >= 2:
+            self._draw_polyline(p, points, HANDLE, 1.0, dashed=True, alpha=160)
+
+        p.setPen(QPen(QColor("#000000"), 1))
+        for i, (px, py) in enumerate(points):
+            cx, cy = self._image_to_canvas(px, py)
+            is_selected = (i == view.selected_anchor_index)
+            size = 6.0 if is_selected else 4.0
+            fill = QColor("#facc15") if is_selected else QColor(HANDLE)
+            p.setBrush(fill)
+            p.drawRect(QRectF(cx - size, cy - size, size * 2, size * 2))
+
+    def _draw_line_rubber_band(self, p: QPainter, view: CanvasView):
+        """Draw dashed rubber-band line from the pending line start to the cursor."""
+        if view.line_start_xy is None or view.last_pointer is None:
+            return
+        lx, ly = view.line_start_xy
+        lcx, lcy = self._image_to_canvas(lx, ly)
+        px, py = view.last_pointer  # canvas coordinates
+        pen = QPen(QColor("#facc15"), 2, Qt.DashLine)
+        p.setPen(pen)
+        p.drawLine(QPointF(lcx, lcy), QPointF(px, py))
+        p.setPen(QPen(QColor("#facc15"), 2))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(QPointF(lcx, lcy), 5, 5)
+
     def _draw_cursor(self, p: QPainter, view: CanvasView):
+        if view.active_tool != ToolMode.BRUSH:
+            return
         if view.last_pointer is None:
             return
         x, y = view.last_pointer
@@ -160,10 +199,17 @@ class CanvasWidget(QWidget):
             return
         radius = max(1.0, int(view.brush_size) * max(view.scale, 0.0001) / 2)
         p.setPen(QPen(QColor("#facc15"), 2))
+        p.setBrush(Qt.NoBrush)
         p.drawEllipse(QPointF(x, y), radius, radius)
         p.setPen(QPen(QColor("#facc15"), 1))
         p.drawLine(int(x - 8), int(y), int(x + 8), int(y))
         p.drawLine(int(x), int(y - 8), int(x), int(y + 8))
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent):
+        x, y = event.position().x(), event.position().y()
+        if event.button() == Qt.LeftButton:
+            self._on_double_click(x, y)
+        self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
         x, y = event.position().x(), event.position().y()

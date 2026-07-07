@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -12,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from brush_watermark.models import Settings, Stroke
+from brush_watermark.models import Settings, Stroke, ToolMode
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import available_font_names
 from brush_watermark.services.exif_metadata import ImageMetadata
@@ -32,6 +33,7 @@ class SidebarPanel(QWidget):
     exit_without_saving = Signal()
     preview_mode_changed = Signal()
     update_now = Signal()
+    tool_changed = Signal(object)
 
     def __init__(self, settings: Settings, swatch_colors: list[str], image_metadata: ImageMetadata | None = None):
         super().__init__()
@@ -67,6 +69,24 @@ class SidebarPanel(QWidget):
         self.metadata_copy_edit = QLineEdit(settings.metadata_copy_text)
         self.metadata_copy_edit.setPlaceholderText("Additional copy info (optional)")
         self._add_form_row(image_layout, "Copy", self.metadata_copy_edit, label_width=52)
+
+        layout.addWidget(SectionHeader("Tools"))
+        tools_row = QHBoxLayout()
+        tools_row.setSpacing(4)
+        self.pointer_btn = QPushButton("Pointer (V)")
+        self.brush_btn = QPushButton("Brush (B)")
+        self.path_btn = QPushButton("Path (A)")
+        for btn in (self.pointer_btn, self.brush_btn, self.path_btn):
+            btn.setCheckable(True)
+            btn.setFixedHeight(28)
+            tools_row.addWidget(btn)
+        self._tool_group = QButtonGroup(self)
+        self._tool_group.setExclusive(True)
+        self._tool_group.addButton(self.pointer_btn)
+        self._tool_group.addButton(self.brush_btn)
+        self._tool_group.addButton(self.path_btn)
+        self.brush_btn.setChecked(True)
+        layout.addLayout(tools_row)
 
         layout.addWidget(SectionHeader("Watermark"))
         watermark_layout = QVBoxLayout()
@@ -169,8 +189,10 @@ class SidebarPanel(QWidget):
         help_layout.setSpacing(2)
         layout.addLayout(help_layout)
         help_text = QLabel(
-            "Paint: left mouse · Select: click watermark · Deselect: click again · "
-            "Erase: right mouse · Wheel: strength · Alt+wheel: brush/font size · "
+            "V=Pointer: click to select/deselect · "
+            "B=Brush: drag=freehand · click+click=straight line · extends selected layer · "
+            "A=Path: drag anchor · double-click segment=add anchor · Del=remove anchor · "
+            "Erase: right mouse (all tools) · Wheel: strength · Alt+wheel: brush size · "
             "Controls edit the selected layer, or tool defaults when nothing is selected."
         )
         help_text.setWordWrap(True)
@@ -223,6 +245,10 @@ class SidebarPanel(QWidget):
         self.repeat_text_check.toggled.connect(self._update_repeat_spacing_enabled)
         self.repeat_spacing_spin.valueChanged.connect(emit_controls)
 
+        self.pointer_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.POINTER))
+        self.brush_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.BRUSH))
+        self.path_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.PATH))
+
         self.stroke_list.itemClicked.connect(
             lambda item: self.layer_item_clicked.emit(self.stroke_list.row(item))
         )
@@ -249,6 +275,16 @@ class SidebarPanel(QWidget):
         if not visible:
             title += " · hidden"
         self.brush_section.set_title(title)
+
+    def set_active_tool(self, tool: ToolMode) -> None:
+        for btn, mode in (
+            (self.pointer_btn, ToolMode.POINTER),
+            (self.brush_btn, ToolMode.BRUSH),
+            (self.path_btn, ToolMode.PATH),
+        ):
+            btn.blockSignals(True)
+            btn.setChecked(tool == mode)
+            btn.blockSignals(False)
 
     def _block_control_signals(self, block: bool):
         widgets = (

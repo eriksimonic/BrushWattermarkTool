@@ -11,8 +11,8 @@ from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessag
 
 from brush_watermark import __version__
 from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
-from brush_watermark.geometry.points import clamp, dist
-from brush_watermark.models import CanvasView, Settings
+from brush_watermark.geometry.points import clamp, dist, find_anchor_index, find_segment_for_insert
+from brush_watermark.models import CanvasView, Settings, ToolMode
 from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.auto_update import can_auto_update
@@ -48,12 +48,16 @@ class MainWindow(QMainWindow):
         self.offset_y = 0.0
         self.refresh_pending = False
 
+        self.active_tool = ToolMode.BRUSH
         self.is_painting = False
         self.is_erasing = False
         self.last_img_xy = None
         self.left_press_img_xy = None
         self.left_press_candidate = -1
         self.left_press_on_selected = False
+        self.line_start_xy: Optional[tuple] = None
+        self.selected_anchor_index: int = -1
+        self.anchor_drag_active: bool = False
         self._ignore_list_selection = False
         self._update_checker: UpdateChecker | None = None
         self._auto_updater: AutoUpdater | None = None
@@ -126,6 +130,7 @@ class MainWindow(QMainWindow):
             on_pointer_move=self._on_pointer_move,
             on_pointer_leave=self._on_pointer_leave,
             text_span_info=self.doc.text_span_info,
+            on_double_click=self.handle_double_click,
         )
         root.addWidget(self.canvas, 1)
 
@@ -151,6 +156,7 @@ class MainWindow(QMainWindow):
         self.sidebar.exit_without_saving.connect(self.exit_without_saving)
         self.sidebar.preview_mode_changed.connect(self.on_preview_mode_changed)
         self.sidebar.update_now.connect(self.start_auto_update)
+        self.sidebar.tool_changed.connect(self.set_active_tool)
 
     def _start_update_check(self):
         self.sidebar.set_version_info(__version__)
@@ -252,6 +258,9 @@ class MainWindow(QMainWindow):
             last_pointer=self.last_pointer,
             brush_size=self.sidebar.brush_row.slider.value(),
             show_original=self.sidebar.show_original_preview(),
+            active_tool=self.active_tool,
+            line_start_xy=self.line_start_xy,
+            selected_anchor_index=self.selected_anchor_index,
         )
 
     def _sync_document_settings_from_sidebar(self):
@@ -407,32 +416,129 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self.schedule_preview(1)
 
+    # --- Tool switching ---
+
+    def set_active_tool(self, tool) -> None:
+        self.active_tool = ToolMode(tool) if not isinstance(tool, ToolMode) else tool
+        if self.active_tool != ToolMode.BRUSH:
+            self.line_start_xy = None
+        if self.active_tool != ToolMode.PATH:
+            self.selected_anchor_index = -1
+            self.anchor_drag_active = False
+        self.sidebar.set_active_tool(self.active_tool)
+        self.canvas.update()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_V:
+            self.set_active_tool(ToolMode.POINTER)
+        elif key == Qt.Key.Key_B:
+            self.set_active_tool(ToolMode.BRUSH)
+        elif key == Qt.Key.Key_A:
+            self.set_active_tool(ToolMode.PATH)
+        elif key == Qt.Key.Key_Escape:
+            if self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
+                self.line_start_xy = None
+                self.canvas.update()
+            elif self.active_tool == ToolMode.PATH and self.selected_anchor_index >= 0:
+                self.selected_anchor_index = -1
+                self.canvas.update()
+        elif key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if self.active_tool == ToolMode.PATH and self.selected_anchor_index >= 0:
+                self.doc.delete_anchor(self.doc.selected_stroke_index, self.selected_anchor_index)
+                self.selected_anchor_index = -1
+                self.refresh_stroke_list()
+                self.schedule_preview()
+        else:
+            super().keyPressEvent(event)
+
+    # --- Left-button dispatch ---
+
     def start_left_interaction(self, canvas_x: float, canvas_y: float):
         if not self.inside_image_canvas(canvas_x, canvas_y):
             return
         img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+        if self.active_tool == ToolMode.POINTER:
+            self._pointer_press(img_x, img_y)
+        elif self.active_tool == ToolMode.BRUSH:
+            self._brush_press(img_x, img_y)
+        else:
+            self._path_press(img_x, img_y)
+
+    def continue_left_interaction(self, canvas_x: float, canvas_y: float):
+        if self.active_tool == ToolMode.POINTER:
+            return
+        if not self.inside_image_canvas(canvas_x, canvas_y):
+            return
+        if self.active_tool == ToolMode.BRUSH:
+            self._brush_move(canvas_x, canvas_y)
+        else:
+            self._path_move(canvas_x, canvas_y)
+
+    def finish_left_interaction(self, canvas_x: float, canvas_y: float):
+        if self.active_tool == ToolMode.POINTER:
+            self._pointer_release(canvas_x, canvas_y)
+        elif self.active_tool == ToolMode.BRUSH:
+            self._brush_release(canvas_x, canvas_y)
+        else:
+            self._path_release(canvas_x, canvas_y)
+
+    def handle_double_click(self, canvas_x: float, canvas_y: float):
+        """Insert an anchor at the clicked segment (Path tool only)."""
+        if self.active_tool != ToolMode.PATH:
+            return
+        if not self._layer_selected() or not self.inside_image_canvas(canvas_x, canvas_y):
+            return
+        img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+        stroke = self.doc.strokes[self.doc.selected_stroke_index]
+        tol_img = max(8.0, 15.0 / max(self.scale, 0.0001))
+        seg_idx = find_segment_for_insert(stroke.points, img_x, img_y, tol=tol_img)
+        if seg_idx >= 0:
+            self.doc.insert_anchor(self.doc.selected_stroke_index, seg_idx, (img_x, img_y))
+            self.selected_anchor_index = seg_idx + 1
+            self.refresh_stroke_list()
+            self.schedule_preview()
+
+    # --- Pointer tool ---
+
+    def _pointer_press(self, img_x: int, img_y: int) -> None:
         self.left_press_img_xy = (img_x, img_y)
         self.left_press_candidate = self.doc.find_stroke_at_point(img_x, img_y)
         self.left_press_on_selected = (
             self.doc.selected_stroke_index >= 0
             and self.doc.point_near_stroke(self.doc.selected_stroke_index, img_x, img_y, extra_tol=24.0)
         )
+
+    def _pointer_release(self, canvas_x: float, canvas_y: float) -> None:
+        if self.left_press_on_selected:
+            self.select_stroke_by_index(-1)
+        elif self.left_press_candidate >= 0:
+            self.select_stroke_by_index(self.left_press_candidate)
+        else:
+            self.select_stroke_by_index(-1)
+        self.left_press_img_xy = None
+        self.left_press_candidate = -1
+        self.left_press_on_selected = False
+
+    # --- Brush tool ---
+
+    def _brush_press(self, img_x: int, img_y: int) -> None:
+        self.left_press_img_xy = (img_x, img_y)
         self.doc.current_brush_size = self.sidebar.brush_row.slider.value()
         self.doc.current_points = []
         self.last_img_xy = None
         self.is_painting = False
 
-    def continue_left_interaction(self, canvas_x: float, canvas_y: float):
-        if self.left_press_img_xy is None or not self.inside_image_canvas(canvas_x, canvas_y):
+    def _brush_move(self, canvas_x: float, canvas_y: float) -> None:
+        if self.left_press_img_xy is None:
             return
         img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
         if not self.is_painting:
             move_dist = dist(self.left_press_img_xy, (img_x, img_y))
             if move_dist < max(6, int(self.doc.current_brush_size * 0.08)):
                 return
+            self.line_start_xy = None  # cancel pending line mode on drag
             self.is_painting = True
-            if self.doc.selected_stroke_index >= 0:
-                self.select_stroke_by_index(-1, refresh_preview=False)
             self.doc.current_points = [self.left_press_img_xy, (img_x, img_y)]
             self.last_img_xy = (img_x, img_y)
         min_capture = max(2, int(self.doc.current_brush_size * 0.012))
@@ -440,37 +546,102 @@ class MainWindow(QMainWindow):
             self.doc.current_points.append((img_x, img_y))
             self.last_img_xy = (img_x, img_y)
 
-    def finish_left_interaction(self, canvas_x: float, canvas_y: float):
-        release_xy = self.canvas_to_image_xy(canvas_x, canvas_y) if self.inside_image_canvas(canvas_x, canvas_y) else None
-        click = self.doc.is_click_release(self.left_press_img_xy, release_xy, self.doc.current_brush_size) if release_xy else True
-
-        if click and self.left_press_on_selected:
-            self.select_stroke_by_index(-1, refresh_preview=False)
-            self.clear_left_interaction()
-            self.schedule_preview()
-            return
+    def _brush_release(self, canvas_x: float, canvas_y: float) -> None:
+        release_xy = (
+            self.canvas_to_image_xy(canvas_x, canvas_y)
+            if self.inside_image_canvas(canvas_x, canvas_y)
+            else None
+        )
+        is_click = (
+            self.doc.is_click_release(self.left_press_img_xy, release_xy, self.doc.current_brush_size)
+            if release_xy
+            else True
+        )
 
         if self.is_painting and self.doc.current_points:
             cleaned = self.doc.finalize_stroke_points(self.doc.current_points, self.doc.current_brush_size)
             if len(cleaned) >= 2:
-                controls = self.sidebar.read_stroke_controls()
-                self.doc.add_stroke(
-                    cleaned,
-                    self.doc.current_brush_size,
-                    controls["opacity"],
-                    controls["blend_mode"],
-                    controls["text_color"],
-                    controls["angle_offset"],
-                    controls["mask_softness"],
-                    controls["repeat_text"],
-                    controls["repeat_spacing"],
-                )
-                self.refresh_stroke_list()
-                self.select_stroke_by_index(len(self.doc.strokes) - 1, refresh_preview=False)
-        elif self.left_press_candidate >= 0:
-            self.select_stroke_by_index(self.left_press_candidate, refresh_preview=False)
-        self.clear_left_interaction()
+                self._commit_brush_points(cleaned)
+        elif is_click and release_xy:
+            if self.line_start_xy is None:
+                self.line_start_xy = release_xy
+            else:
+                segment = [self.line_start_xy, release_xy]
+                cleaned = self.doc.finalize_stroke_points(segment, self.doc.current_brush_size)
+                if len(cleaned) >= 2:
+                    self._commit_brush_points(cleaned)
+                self.line_start_xy = release_xy  # chain next segment from here
+
+        self.doc.current_points = []
+        self.last_img_xy = None
+        self.is_painting = False
+        self.left_press_img_xy = None
         self.schedule_preview()
+
+    def _commit_brush_points(self, points: list) -> None:
+        if self._layer_selected():
+            self.doc.append_to_stroke(self.doc.selected_stroke_index, points)
+            self.refresh_stroke_list()
+        else:
+            controls = self.sidebar.read_stroke_controls()
+            self.doc.add_stroke(
+                points,
+                self.doc.current_brush_size,
+                controls["opacity"],
+                controls["blend_mode"],
+                controls["text_color"],
+                controls["angle_offset"],
+                controls["mask_softness"],
+                controls["repeat_text"],
+                controls["repeat_spacing"],
+            )
+            self.refresh_stroke_list()
+            self.select_stroke_by_index(len(self.doc.strokes) - 1, refresh_preview=False)
+
+    # --- Path tool ---
+
+    def _path_press(self, img_x: int, img_y: int) -> None:
+        self.left_press_img_xy = (img_x, img_y)
+        self.anchor_drag_active = False
+
+        if not self._layer_selected():
+            candidate = self.doc.find_stroke_at_point(img_x, img_y)
+            if candidate >= 0:
+                self.select_stroke_by_index(candidate, refresh_preview=False)
+                self.canvas.update()
+            return
+
+        stroke = self.doc.strokes[self.doc.selected_stroke_index]
+        tol_img = max(8.0, 10.0 / max(self.scale, 0.0001))
+        anchor_idx = find_anchor_index(stroke.points, img_x, img_y, tol=tol_img)
+        if anchor_idx >= 0:
+            self.selected_anchor_index = anchor_idx
+            self.anchor_drag_active = True
+            self.last_img_xy = (img_x, img_y)
+        else:
+            self.selected_anchor_index = -1
+
+    def _path_move(self, canvas_x: float, canvas_y: float) -> None:
+        if not self.anchor_drag_active:
+            return
+        img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+        self.doc.move_anchor(self.doc.selected_stroke_index, self.selected_anchor_index, (img_x, img_y))
+        self.last_img_xy = (img_x, img_y)
+        self.canvas.update()
+
+    def _path_release(self, canvas_x: float, canvas_y: float) -> None:
+        if self.anchor_drag_active:
+            self.anchor_drag_active = False
+            self.refresh_stroke_list()
+            self.schedule_preview()
+        elif self.left_press_img_xy is not None and not self._layer_selected():
+            if self.inside_image_canvas(canvas_x, canvas_y):
+                img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+                candidate = self.doc.find_stroke_at_point(img_x, img_y)
+                if candidate >= 0:
+                    self.select_stroke_by_index(candidate)
+        self.left_press_img_xy = None
+        self.anchor_drag_active = False
 
     def start_erase_interaction(self, canvas_x: float, canvas_y: float):
         if not self.inside_image_canvas(canvas_x, canvas_y):
