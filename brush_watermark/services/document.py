@@ -4,19 +4,24 @@ from typing import Optional
 from PIL import Image, ImageDraw
 
 from brush_watermark.config import SUPPORTED_EXTENSIONS
+from brush_watermark.geometry.curve import (
+    anchors_from_points,
+    catmull_rom_curve,
+)
 from brush_watermark.geometry.points import (
     Point,
     chaikin_smooth,
+    clamp,
     dist,
     path_length,
     point_segment_distance,
     simplify_points,
 )
 from brush_watermark.models import Settings, Stroke
-from brush_watermark.rendering.blend import blend_mode_short
+from brush_watermark.rendering.blend import blend_mode_short, composite_watermark_layer, normalize_blend_mode
 from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
-from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_preview_image
+from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_stroke_watermark_layer
 from brush_watermark.services.exif_metadata import ImageMetadata, read_exif_bytes, read_image_metadata
 
 
@@ -42,9 +47,16 @@ class Document:
 
         self.erase_mask = Image.new("L", (self.full_w, self.full_h), 0)
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
+        self._erase_version = 0
 
         self.current_points: list[Point] = []
         self.current_brush_size = settings.brush_size
+
+        # Preview render caches: rendered per-stroke layers (cropped to their
+        # bounding box) keyed by a content signature, plus the resized base image.
+        self._layer_cache: dict[tuple, tuple] = {}
+        self._base_preview: Optional[Image.Image] = None
+        self._base_preview_size: Optional[tuple[int, int]] = None
 
     def visible_strokes(self) -> list[Stroke]:
         return [s for s in self.strokes if s.visible]
@@ -80,11 +92,16 @@ class Document:
                 (int(round(x * scale_factor)), int(round(y * scale_factor)))
                 for x, y in stroke.points
             ]
+            anchors = [
+                (int(round(x * scale_factor)), int(round(y * scale_factor)))
+                for x, y in stroke.anchors
+            ]
             scaled.append(
                 Stroke(
                     name=stroke.name,
                     visible=stroke.visible,
                     points=pts,
+                    anchors=anchors,
                     brush_size=max(1, int(round(stroke.brush_size * scale_factor))),
                     opacity=stroke.opacity,
                     blend_mode=stroke.blend_mode,
@@ -126,17 +143,83 @@ class Document:
         result = composite_watermark(self.original, self.strokes, self.settings, self.erase_mask)
         return self._maybe_append_metadata_footer(result)
 
-    def make_preview_image(self, display_w: int, display_h: int, scale_factor: float) -> Image.Image:
-        preview_strokes = self.scaled_strokes(scale_factor)
-        preview = make_preview_image(
-            self.original,
+    def _preview_base_image(self, display_w: int, display_h: int) -> Image.Image:
+        """LANCZOS-resized copy of the original, cached by display size."""
+        size = (display_w, display_h)
+        if self._base_preview is None or self._base_preview_size != size:
+            self._base_preview = self.original.resize(size, Image.Resampling.LANCZOS).convert("RGBA")
+            self._base_preview_size = size
+        return self._base_preview.copy()
+
+    def _stroke_layer_signature(self, stroke: Stroke, display_w: int, display_h: int) -> tuple:
+        """Everything that affects a stroke's rendered (pre-blend) layer."""
+        return (
+            tuple(stroke.points),
+            stroke.brush_size,
+            stroke.mask_softness,
+            stroke.angle_offset,
+            stroke.text_color,
+            stroke.repeat_text,
+            stroke.repeat_spacing,
+            stroke.visible,
+            self.settings.watermark_text,
+            self.settings.font_name,
+            self.settings.auto_fit_text,
             display_w,
             display_h,
-            preview_strokes,
-            self.settings,
-            self.erase_mask,
-            scale_factor,
+            self._erase_version,
         )
+
+    def _composite_preview(
+        self,
+        base_rgba: Image.Image,
+        strokes: list[Stroke],
+        scale_factor: float,
+        display_w: int,
+        display_h: int,
+    ) -> Image.Image:
+        """Composite strokes onto base, reusing cached per-stroke layers.
+
+        Unchanged strokes are not re-rendered; blending only touches each
+        stroke's bounding box, so cost scales with edited/added strokes rather
+        than the total number of strokes.
+        """
+        result = base_rgba
+        new_cache: dict[tuple, tuple] = {}
+        for stroke in strokes:
+            if not stroke.visible:
+                continue
+            sig = self._stroke_layer_signature(stroke, display_w, display_h)
+            cached = self._layer_cache.get(sig)
+            if cached is None:
+                layer = make_stroke_watermark_layer(
+                    display_w, display_h, stroke, self.settings, self.erase_mask, scale_factor
+                )
+                box = layer.getbbox()
+                cached = (layer.crop(box), box) if box is not None else (None, None)
+            new_cache[sig] = cached
+            layer_crop, box = cached
+            if layer_crop is None:
+                continue
+            strength = clamp(stroke.opacity, 1, 100) / 100.0
+            region = result.crop(box)
+            blended = composite_watermark_layer(
+                region,
+                layer_crop,
+                stroke.text_color,
+                normalize_blend_mode(stroke.blend_mode, self.settings.blend_mode),
+                strength,
+            )
+            result.paste(blended, box)
+        self._layer_cache = new_cache
+        return result
+
+    def make_preview_image(self, display_w: int, display_h: int, scale_factor: float) -> Image.Image:
+        display_w = max(1, int(display_w))
+        display_h = max(1, int(display_h))
+        preview_strokes = self.scaled_strokes(scale_factor)
+        base = self._preview_base_image(display_w, display_h)
+        preview = self._composite_preview(base, preview_strokes, scale_factor, display_w, display_h)
         if self.settings.add_visible_metadata:
             preview = append_metadata_footer(
                 preview.convert("RGB"),
@@ -190,6 +273,17 @@ class Document:
                 best_idx = idx
         return best_idx
 
+    def _anchor_epsilon(self, brush_size: int) -> float:
+        """Simplification tolerance that yields a handful of Illustrator-style anchors."""
+        return max(6.0, brush_size * 0.35)
+
+    def _rebuild_curve(self, stroke: Stroke) -> None:
+        """Recompute the dense render curve from the stroke's anchors."""
+        if len(stroke.anchors) >= 2:
+            stroke.points = catmull_rom_curve(stroke.anchors)
+        else:
+            stroke.points = list(stroke.anchors)
+
     def add_stroke(
         self,
         points: list[Point],
@@ -202,10 +296,13 @@ class Document:
         repeat_text: bool,
         repeat_spacing: int,
     ) -> Stroke:
+        anchors = anchors_from_points(points, self._anchor_epsilon(brush_size))
+        curve = catmull_rom_curve(anchors) if len(anchors) >= 2 else list(anchors)
         stroke = Stroke(
             name=f"Stroke {self.stroke_counter}",
             visible=True,
-            points=points,
+            points=curve,
+            anchors=anchors,
             brush_size=brush_size,
             opacity=opacity,
             blend_mode=blend_mode,
@@ -224,30 +321,39 @@ class Document:
         return simplify_points(raw_points, min_dist=max(2.0, brush_size * 0.010))
 
     def append_to_stroke(self, index: int, new_points: list[Point]) -> None:
-        """Append new_points to an existing stroke, simplifying the junction."""
+        """Append new_points to an existing stroke, extending its anchors."""
         if index < 0 or index >= len(self.strokes):
             return
         stroke = self.strokes[index]
-        combined = stroke.points + new_points
-        stroke.points = simplify_points(combined, min_dist=max(2.0, stroke.brush_size * 0.010))
+        new_anchors = anchors_from_points(new_points, self._anchor_epsilon(stroke.brush_size))
+        combined = list(stroke.anchors) + new_anchors
+        deduped: list[Point] = []
+        for pt in combined:
+            if not deduped or deduped[-1] != pt:
+                deduped.append(pt)
+        stroke.anchors = deduped
+        self._rebuild_curve(stroke)
 
     def move_anchor(self, stroke_index: int, anchor_index: int, xy: Point) -> None:
         if 0 <= stroke_index < len(self.strokes):
             stroke = self.strokes[stroke_index]
-            if 0 <= anchor_index < len(stroke.points):
-                stroke.points[anchor_index] = xy
+            if 0 <= anchor_index < len(stroke.anchors):
+                stroke.anchors[anchor_index] = xy
+                self._rebuild_curve(stroke)
 
     def insert_anchor(self, stroke_index: int, segment_index: int, xy: Point) -> None:
         if 0 <= stroke_index < len(self.strokes):
             stroke = self.strokes[stroke_index]
-            if 0 <= segment_index < len(stroke.points) - 1:
-                stroke.points.insert(segment_index + 1, xy)
+            if 0 <= segment_index < len(stroke.anchors) - 1:
+                stroke.anchors.insert(segment_index + 1, xy)
+                self._rebuild_curve(stroke)
 
     def delete_anchor(self, stroke_index: int, anchor_index: int) -> None:
         if 0 <= stroke_index < len(self.strokes):
             stroke = self.strokes[stroke_index]
-            if len(stroke.points) > 2 and 0 <= anchor_index < len(stroke.points):
-                del stroke.points[anchor_index]
+            if len(stroke.anchors) > 2 and 0 <= anchor_index < len(stroke.anchors):
+                del stroke.anchors[anchor_index]
+                self._rebuild_curve(stroke)
 
     def select_stroke(self, index: int) -> None:
         if index < 0 or index >= len(self.strokes):
@@ -291,11 +397,14 @@ class Document:
         self.selected_stroke_index = -1
         self.erase_mask = Image.new("L", (self.full_w, self.full_h), 0)
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
+        self._erase_version += 1
+        self._layer_cache = {}
 
     def add_erase_to_mask(self, img_x: int, img_y: int) -> None:
         size = self.settings.brush_size
         r = size // 2
         self._erase_draw.ellipse((img_x - r, img_y - r, img_x + r, img_y + r), fill=255)
+        self._erase_version += 1
 
     def add_erase_line_to_mask(self, x0: int, y0: int, x1: int, y1: int) -> None:
         size = self.settings.brush_size

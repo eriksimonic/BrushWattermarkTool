@@ -13,6 +13,7 @@ class ToolMode(str, Enum):
     POINTER = "pointer"
     BRUSH = "brush"
     PATH = "path"
+    ERASER = "eraser"
 
 
 @dataclass
@@ -83,6 +84,10 @@ class Stroke:
     repeat_text: bool = False
     repeat_spacing: int = 5
     visible: bool = True
+    # Sparse editable control points. ``points`` is the dense smooth curve
+    # (a Catmull-Rom spline) rendered/used for text; ``anchors`` is what the
+    # Path tool lets the user drag, insert, and delete.
+    anchors: list[Point] = field(default_factory=list)
 
 
 @dataclass
@@ -115,3 +120,4 @@ class CanvasView:
     line_start_xy: Optional[Point] = None
     selected_anchor_index: int = -1
     snap_endpoint_xy: Optional[Point] = None
+    is_drawing: bool = False

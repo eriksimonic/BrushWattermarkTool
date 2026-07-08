@@ -76,14 +76,17 @@ class SidebarPanel(QWidget):
         self.pointer_btn = QPushButton("\u2196")   # ↖ arrow = pointer/select
         self.brush_btn = QPushButton("\u270f")     # ✏ pencil = brush/draw
         self.path_btn = QPushButton("\u25c7")      # ◇ diamond = anchor/path
+        self.eraser_btn = QPushButton("\u232b")    # ⌫ = eraser
         self.pointer_btn.setToolTip("Pointer — select and deselect strokes  (V)")
         self.brush_btn.setToolTip(
-            "Brush — drag=freehand · click+click=straight line · extends selected layer  (B)"
+            "Brush — LEFT-drag=freehand · LEFT-click=straight-line points · "
+            "LEFT-click a line end=resume · RIGHT-click=stop drawing  (B)"
         )
         self.path_btn.setToolTip(
             "Path — drag anchor · double-click segment=add anchor · Del=remove  (A)"
         )
-        for btn in (self.pointer_btn, self.brush_btn, self.path_btn):
+        self.eraser_btn.setToolTip("Eraser — drag to erase watermark pixels  (E)")
+        for btn in (self.pointer_btn, self.brush_btn, self.path_btn, self.eraser_btn):
             btn.setCheckable(True)
             btn.setFixedHeight(28)
             btn.setFixedSize(36, 36)
@@ -94,6 +97,7 @@ class SidebarPanel(QWidget):
         self._tool_group.addButton(self.pointer_btn)
         self._tool_group.addButton(self.brush_btn)
         self._tool_group.addButton(self.path_btn)
+        self._tool_group.addButton(self.eraser_btn)
         self.brush_btn.setChecked(True)
         layout.addLayout(tools_row)
 
@@ -199,9 +203,10 @@ class SidebarPanel(QWidget):
         layout.addLayout(help_layout)
         help_text = QLabel(
             "V=Pointer: click to select/deselect · "
-            "B=Brush: drag=freehand · click+click=straight line · extends selected layer · "
+            "B=Brush: left-drag=freehand · left-click=straight line · "
+            "left-click a line end=resume · right-click=stop drawing · "
             "A=Path: drag anchor · double-click segment=add anchor · Del=remove anchor · "
-            "Erase: right mouse (all tools) · Wheel: strength · Alt+wheel: brush size · "
+            "E=Eraser: drag to erase · Wheel: strength · Alt+wheel: brush size · "
             "Controls edit the selected layer, or tool defaults when nothing is selected."
         )
         help_text.setWordWrap(True)
@@ -257,6 +262,7 @@ class SidebarPanel(QWidget):
         self.pointer_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.POINTER))
         self.brush_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.BRUSH))
         self.path_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.PATH))
+        self.eraser_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.ERASER))
 
         self.stroke_list.itemClicked.connect(
             lambda item: self.layer_item_clicked.emit(self.stroke_list.row(item))
@@ -290,6 +296,7 @@ class SidebarPanel(QWidget):
             (self.pointer_btn, ToolMode.POINTER),
             (self.brush_btn, ToolMode.BRUSH),
             (self.path_btn, ToolMode.PATH),
+            (self.eraser_btn, ToolMode.ERASER),
         ):
             btn.blockSignals(True)
             btn.setChecked(tool == mode)

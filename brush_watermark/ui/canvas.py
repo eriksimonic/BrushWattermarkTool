@@ -149,26 +149,31 @@ class CanvasWidget(QWidget):
                 self._draw_stroke_selection_guide(p, stroke.points, stroke.name)
 
         if len(view.current_points) >= 2:
-            smooth = smooth_path_for_text(view.current_points)
-            smooth = normalize_text_direction(smooth)
             width = max(2.0, view.current_brush_size * max(view.scale, 0.0001) * 0.08)
-            self._draw_polyline(p, smooth, "#facc15", width)
-            span_info = self._text_span_info(smooth, view.current_brush_size)
-            if span_info:
-                self._draw_span_guide(p, span_info)
+            if view.is_drawing:
+                # Keep the live overlay cheap while dragging a long freehand stroke:
+                # draw the raw polyline and skip the expensive smoothing + text guide.
+                self._draw_polyline(p, view.current_points, "#facc15", width)
+            else:
+                smooth = smooth_path_for_text(view.current_points)
+                smooth = normalize_text_direction(smooth)
+                self._draw_polyline(p, smooth, "#facc15", width)
+                span_info = self._text_span_info(smooth, view.current_brush_size)
+                if span_info:
+                    self._draw_span_guide(p, span_info)
 
         if view.active_tool == ToolMode.BRUSH:
             self._draw_snap_indicator(p, view)
             self._draw_line_rubber_band(p, view)
 
     def _draw_anchor_handles(self, p: QPainter, view: CanvasView, stroke):
-        """Draw polyline + square handles for path anchor editing."""
-        points = stroke.points
-        if len(points) >= 2:
-            self._draw_polyline(p, points, HANDLE, 1.0, dashed=True, alpha=160)
+        """Draw the smooth curve plus square handles at the editable anchors."""
+        if len(stroke.points) >= 2:
+            self._draw_polyline(p, stroke.points, HANDLE, 1.0, dashed=True, alpha=160)
 
+        anchors = stroke.anchors if stroke.anchors else stroke.points
         p.setPen(QPen(QColor("#000000"), 1))
-        for i, (px, py) in enumerate(points):
+        for i, (px, py) in enumerate(anchors):
             cx, cy = self._image_to_canvas(px, py)
             is_selected = (i == view.selected_anchor_index)
             size = 6.0 if is_selected else 4.0
@@ -203,18 +208,19 @@ class CanvasWidget(QWidget):
         p.drawEllipse(QPointF(lcx, lcy), 5, 5)
 
     def _draw_cursor(self, p: QPainter, view: CanvasView):
-        if view.active_tool != ToolMode.BRUSH:
+        if view.active_tool not in (ToolMode.BRUSH, ToolMode.ERASER):
             return
         if view.last_pointer is None:
             return
         x, y = view.last_pointer
         if not self._inside_image(x, y):
             return
+        color = QColor("#f87171") if view.active_tool == ToolMode.ERASER else QColor("#facc15")
         radius = max(1.0, int(view.brush_size) * max(view.scale, 0.0001) / 2)
-        p.setPen(QPen(QColor("#facc15"), 2))
+        p.setPen(QPen(color, 2))
         p.setBrush(Qt.NoBrush)
         p.drawEllipse(QPointF(x, y), radius, radius)
-        p.setPen(QPen(QColor("#facc15"), 1))
+        p.setPen(QPen(color, 1))
         p.drawLine(int(x - 8), int(y), int(x + 8), int(y))
         p.drawLine(int(x), int(y - 8), int(x), int(y + 8))
 

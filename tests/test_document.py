@@ -20,7 +20,14 @@ def _make_doc(tmp_path: Path):
 
 
 def _stroke(pts, brush_size=50, opacity=50):
-    return Stroke(name="S", points=list(pts), brush_size=brush_size, opacity=opacity)
+    pts = list(pts)
+    return Stroke(
+        name="S",
+        points=list(pts),
+        anchors=list(pts),
+        brush_size=brush_size,
+        opacity=opacity,
+    )
 
 
 class TestAppendToStroke:
@@ -57,13 +64,23 @@ class TestMoveAnchor:
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (50, 0), (100, 0)]))
         doc.move_anchor(0, 1, (50, 25))
-        assert doc.strokes[0].points[1] == (50, 25)
+        assert doc.strokes[0].anchors[1] == (50, 25)
+
+    def test_rebuilds_curve_through_moved_anchor(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.strokes.append(_stroke([(0, 0), (50, 0), (100, 0)]))
+        doc.move_anchor(0, 1, (50, 40))
+        pts = doc.strokes[0].points
+        # Endpoints stay put; the curve now bulges toward the moved anchor.
+        assert pts[0] == (0, 0)
+        assert pts[-1] == (100, 0)
+        assert max(y for _, y in pts) > 0
 
     def test_ignores_out_of_range_anchor(self, tmp_path):
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (10, 0)]))
         doc.move_anchor(0, 99, (5, 5))  # must not raise
-        assert doc.strokes[0].points == [(0, 0), (10, 0)]
+        assert doc.strokes[0].anchors == [(0, 0), (10, 0)]
 
     def test_ignores_out_of_range_stroke(self, tmp_path):
         doc = _make_doc(tmp_path)
@@ -75,15 +92,15 @@ class TestInsertAnchor:
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (100, 0)]))
         doc.insert_anchor(0, 0, (50, 0))
-        pts = doc.strokes[0].points
-        assert len(pts) == 3
-        assert pts[1] == (50, 0)
+        anchors = doc.strokes[0].anchors
+        assert len(anchors) == 3
+        assert anchors[1] == (50, 0)
 
     def test_does_not_insert_beyond_last_segment(self, tmp_path):
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (10, 0)]))
         doc.insert_anchor(0, 5, (99, 99))  # segment index 5 doesn't exist
-        assert len(doc.strokes[0].points) == 2
+        assert len(doc.strokes[0].anchors) == 2
 
     def test_ignores_out_of_range_stroke(self, tmp_path):
         doc = _make_doc(tmp_path)
@@ -95,19 +112,19 @@ class TestDeleteAnchor:
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (50, 50), (100, 0)]))
         doc.delete_anchor(0, 1)
-        assert doc.strokes[0].points == [(0, 0), (100, 0)]
+        assert doc.strokes[0].anchors == [(0, 0), (100, 0)]
 
     def test_refuses_to_delete_below_two_points(self, tmp_path):
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (10, 0)]))
         doc.delete_anchor(0, 0)
-        assert len(doc.strokes[0].points) == 2
+        assert len(doc.strokes[0].anchors) == 2
 
     def test_ignores_out_of_range(self, tmp_path):
         doc = _make_doc(tmp_path)
         doc.strokes.append(_stroke([(0, 0), (10, 0), (20, 0)]))
         doc.delete_anchor(0, 99)  # bad index, must not raise
-        assert len(doc.strokes[0].points) == 3
+        assert len(doc.strokes[0].anchors) == 3
 
 
 class TestFinalizeStrokePoints:

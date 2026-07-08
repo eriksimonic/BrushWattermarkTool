@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessag
 
 from brush_watermark import __version__
 from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
-from brush_watermark.geometry.points import clamp, dist, find_anchor_index, find_segment_for_insert
+from brush_watermark.geometry.curve import find_curve_segment_for_insert
+from brush_watermark.geometry.points import clamp, dist, find_anchor_index
 from brush_watermark.models import CanvasView, Settings, ToolMode
 from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
@@ -126,9 +127,9 @@ class MainWindow(QMainWindow):
             on_left_press=self.start_left_interaction,
             on_left_move=self.continue_left_interaction,
             on_left_release=self.finish_left_interaction,
-            on_right_press=self.start_erase_interaction,
-            on_right_move=self.continue_erase_interaction,
-            on_right_release=self.finish_erase_interaction,
+            on_right_press=self.start_right_interaction,
+            on_right_move=self.continue_right_interaction,
+            on_right_release=self.finish_right_interaction,
             on_wheel=self.handle_wheel,
             on_pointer_move=self._on_pointer_move,
             on_pointer_leave=self._on_pointer_leave,
@@ -287,6 +288,7 @@ class MainWindow(QMainWindow):
             line_start_xy=self.line_start_xy,
             selected_anchor_index=self.selected_anchor_index,
             snap_endpoint_xy=self.snap_endpoint[1] if self.snap_endpoint else None,
+            is_drawing=self.is_painting,
         )
 
     def _sync_document_settings_from_sidebar(self):
@@ -448,6 +450,7 @@ class MainWindow(QMainWindow):
         self.active_tool = ToolMode(tool) if not isinstance(tool, ToolMode) else tool
         self.snap_endpoint = None
         self._line_stopped = False
+        self.is_erasing = False
         if self.active_tool != ToolMode.BRUSH:
             self.line_start_xy = None
         if self.active_tool != ToolMode.PATH:
@@ -464,6 +467,8 @@ class MainWindow(QMainWindow):
             self.set_active_tool(ToolMode.BRUSH)
         elif key == Qt.Key.Key_A:
             self.set_active_tool(ToolMode.PATH)
+        elif key == Qt.Key.Key_E:
+            self.set_active_tool(ToolMode.ERASER)
         elif key == Qt.Key.Key_Escape:
             if self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
                 self.line_start_xy = None
@@ -490,6 +495,8 @@ class MainWindow(QMainWindow):
             self._pointer_press(img_x, img_y)
         elif self.active_tool == ToolMode.BRUSH:
             self._brush_press(img_x, img_y)
+        elif self.active_tool == ToolMode.ERASER:
+            self._erase_press(img_x, img_y)
         else:
             self._path_press(img_x, img_y)
 
@@ -500,6 +507,8 @@ class MainWindow(QMainWindow):
             return
         if self.active_tool == ToolMode.BRUSH:
             self._brush_move(canvas_x, canvas_y)
+        elif self.active_tool == ToolMode.ERASER:
+            self._erase_move(canvas_x, canvas_y)
         else:
             self._path_move(canvas_x, canvas_y)
 
@@ -508,8 +517,22 @@ class MainWindow(QMainWindow):
             self._pointer_release(canvas_x, canvas_y)
         elif self.active_tool == ToolMode.BRUSH:
             self._brush_release(canvas_x, canvas_y)
+        elif self.active_tool == ToolMode.ERASER:
+            self._erase_release(canvas_x, canvas_y)
         else:
             self._path_release(canvas_x, canvas_y)
+
+    # --- Right-button dispatch (stop drawing in Brush mode) ---
+
+    def start_right_interaction(self, canvas_x: float, canvas_y: float):
+        if self.active_tool == ToolMode.BRUSH:
+            self._brush_stop()
+
+    def continue_right_interaction(self, canvas_x: float, canvas_y: float):
+        return
+
+    def finish_right_interaction(self, canvas_x: float, canvas_y: float):
+        return
 
     def handle_double_click(self, canvas_x: float, canvas_y: float):
         """Insert an anchor at the clicked segment (Path tool only)."""
@@ -520,7 +543,7 @@ class MainWindow(QMainWindow):
         img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
         stroke = self.doc.strokes[self.doc.selected_stroke_index]
         tol_img = max(8.0, 15.0 / max(self.scale, 0.0001))
-        seg_idx = find_segment_for_insert(stroke.points, img_x, img_y, tol=tol_img)
+        seg_idx = find_curve_segment_for_insert(stroke.anchors, img_x, img_y, tol=tol_img)
         if seg_idx >= 0:
             self.doc.insert_anchor(self.doc.selected_stroke_index, seg_idx, (img_x, img_y))
             self.selected_anchor_index = seg_idx + 1
@@ -609,6 +632,10 @@ class MainWindow(QMainWindow):
             cleaned = self.doc.finalize_stroke_points(self.doc.current_points, self.doc.current_brush_size)
             if len(cleaned) >= 2:
                 self._commit_brush_points(cleaned)
+                # Keep the chain active from the freehand end, so continuing and
+                # right-click-to-stop behave the same as with click-placed lines.
+                self.line_start_xy = cleaned[-1]
+                self._line_stopped = False
         elif snap_click:
             # User clicked an endpoint to arm continuation — line_start_xy is already set.
             # Nothing to commit yet; the next click will draw from here.
@@ -664,7 +691,7 @@ class MainWindow(QMainWindow):
 
         stroke = self.doc.strokes[self.doc.selected_stroke_index]
         tol_img = max(8.0, 10.0 / max(self.scale, 0.0001))
-        anchor_idx = find_anchor_index(stroke.points, img_x, img_y, tol=tol_img)
+        anchor_idx = find_anchor_index(stroke.anchors, img_x, img_y, tol=tol_img)
         if anchor_idx >= 0:
             self.selected_anchor_index = anchor_idx
             self.anchor_drag_active = True
@@ -694,24 +721,23 @@ class MainWindow(QMainWindow):
         self.left_press_img_xy = None
         self.anchor_drag_active = False
 
-    def start_erase_interaction(self, canvas_x: float, canvas_y: float):
-        # In Brush mode, right-click stops the active line chain instead of erasing.
-        if self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
-            self.line_start_xy = None
-            self._snap_activated = False
-            self._line_stopped = True   # next non-snap click will start a new stroke
-            self.canvas.update()
-            return
-        if not self.inside_image_canvas(canvas_x, canvas_y):
-            return
-        img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+    def _brush_stop(self) -> None:
+        """Left-click in Brush mode ends the current line chain (without deselecting)."""
+        self.line_start_xy = None
+        self._snap_activated = False
+        self._line_stopped = True   # next non-snap draw will start a new stroke
+        self.canvas.update()
+
+    # --- Eraser tool ---
+
+    def _erase_press(self, img_x: int, img_y: int) -> None:
         self.doc.add_erase_to_mask(img_x, img_y)
         self.last_img_xy = (img_x, img_y)
         self.is_erasing = True
         self.schedule_preview(20)
 
-    def continue_erase_interaction(self, canvas_x: float, canvas_y: float):
-        if not self.is_erasing or not self.inside_image_canvas(canvas_x, canvas_y):
+    def _erase_move(self, canvas_x: float, canvas_y: float) -> None:
+        if not self.is_erasing:
             return
         img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
         if self.last_img_xy is None:
@@ -720,7 +746,7 @@ class MainWindow(QMainWindow):
         self.last_img_xy = (img_x, img_y)
         self.schedule_preview(20)
 
-    def finish_erase_interaction(self, canvas_x: float, canvas_y: float):
+    def _erase_release(self, canvas_x: float, canvas_y: float) -> None:
         self.last_img_xy = None
         self.is_erasing = False
         self.schedule_preview(20)
