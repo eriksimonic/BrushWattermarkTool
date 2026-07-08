@@ -426,7 +426,11 @@ class MainWindow(QMainWindow):
             and self.doc.settings.add_visible_metadata
         )
         content_w, content_h = self.doc.preview_content_size(include_metadata=include_metadata)
-        self.scale = max(0.0001, min(canvas_w / content_w, canvas_h / content_h))
+        # Fit the image to the canvas, but never upscale past 1:1 (100%). A small
+        # image (e.g. 100px) stays at its native pixel size instead of being blown
+        # up to the monitor resolution, which avoids a blurry/pixelated preview.
+        fit_scale = min(canvas_w / content_w, canvas_h / content_h)
+        self.scale = max(0.0001, min(fit_scale, 1.0))
         self.display_w = max(1, int(self.doc.full_w * self.scale))
         self.display_h = max(1, int(self.doc.full_h * self.scale))
         if self.sidebar.show_original_preview():

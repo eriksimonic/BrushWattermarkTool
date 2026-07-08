@@ -57,6 +57,7 @@ class CanvasWidget(QWidget):
         view = self._get_view()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.SmoothPixmapTransform, True)
         p.fillRect(self.rect(), QColor(CANVAS_BG))
 
         if self.preview_pixmap is not None:
