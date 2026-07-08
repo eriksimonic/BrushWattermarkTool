@@ -158,6 +158,7 @@ class CanvasWidget(QWidget):
                 self._draw_span_guide(p, span_info)
 
         if view.active_tool == ToolMode.BRUSH:
+            self._draw_snap_indicator(p, view)
             self._draw_line_rubber_band(p, view)
 
     def _draw_anchor_handles(self, p: QPainter, view: CanvasView, stroke):
@@ -174,6 +175,18 @@ class CanvasWidget(QWidget):
             fill = QColor("#facc15") if is_selected else QColor(HANDLE)
             p.setBrush(fill)
             p.drawRect(QRectF(cx - size, cy - size, size * 2, size * 2))
+
+    def _draw_snap_indicator(self, p: QPainter, view: CanvasView):
+        """Green circle + crosshair at a stroke endpoint the cursor is hovering near."""
+        if view.snap_endpoint_xy is None:
+            return
+        px, py = view.snap_endpoint_xy
+        cx, cy = self._image_to_canvas(px, py)
+        p.setPen(QPen(QColor("#22c55e"), 2))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(QPointF(cx, cy), 10, 10)
+        p.drawLine(QPointF(cx - 6, cy), QPointF(cx + 6, cy))
+        p.drawLine(QPointF(cx, cy - 6), QPointF(cx, cy + 6))
 
     def _draw_line_rubber_band(self, p: QPainter, view: CanvasView):
         """Draw dashed rubber-band line from the pending line start to the cursor."""

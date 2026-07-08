@@ -114,3 +114,4 @@ class CanvasView:
     active_tool: ToolMode = ToolMode.BRUSH
     line_start_xy: Optional[Point] = None
     selected_anchor_index: int = -1
+    snap_endpoint_xy: Optional[Point] = None

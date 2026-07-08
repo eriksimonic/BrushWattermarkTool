@@ -73,13 +73,22 @@ class SidebarPanel(QWidget):
         layout.addWidget(SectionHeader("Tools"))
         tools_row = QHBoxLayout()
         tools_row.setSpacing(4)
-        self.pointer_btn = QPushButton("Pointer (V)")
-        self.brush_btn = QPushButton("Brush (B)")
-        self.path_btn = QPushButton("Path (A)")
+        self.pointer_btn = QPushButton("\u2196")   # ↖ arrow = pointer/select
+        self.brush_btn = QPushButton("\u270f")     # ✏ pencil = brush/draw
+        self.path_btn = QPushButton("\u25c7")      # ◇ diamond = anchor/path
+        self.pointer_btn.setToolTip("Pointer — select and deselect strokes  (V)")
+        self.brush_btn.setToolTip(
+            "Brush — drag=freehand · click+click=straight line · extends selected layer  (B)"
+        )
+        self.path_btn.setToolTip(
+            "Path — drag anchor · double-click segment=add anchor · Del=remove  (A)"
+        )
         for btn in (self.pointer_btn, self.brush_btn, self.path_btn):
             btn.setCheckable(True)
             btn.setFixedHeight(28)
+            btn.setFixedSize(36, 36)
             tools_row.addWidget(btn)
+        tools_row.addStretch(1)
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
         self._tool_group.addButton(self.pointer_btn)

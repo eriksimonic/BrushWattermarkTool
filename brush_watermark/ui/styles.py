@@ -146,6 +146,24 @@ def app_stylesheet() -> str:
         background: {BUTTON_HOVER};
         border-color: {SELECTION_BORDER};
     }}
+    QPushButton#ToolBtn {{
+        font-size: 32px;
+        font-family: 'Segoe UI Symbol', 'Segoe UI', Arial, sans-serif;
+        padding: 0px;
+        min-width: 48px;
+        max-width: 48px;
+        min-height: 48px;
+        max-height: 48px;
+        border-radius: 4px;
+    }}
+    QPushButton#ToolBtn:checked {{
+        background: {SELECTION};
+        border: 1px solid {SELECTION_BORDER};
+    }}
+    QPushButton#ToolBtn:hover {{
+        background: {BUTTON_HOVER};
+        border-color: {SELECTION_BORDER};
+    }}
     QScrollArea {{
         border: none;
         background: {PANEL};

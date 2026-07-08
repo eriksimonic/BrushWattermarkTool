@@ -56,6 +56,9 @@ class MainWindow(QMainWindow):
         self.left_press_candidate = -1
         self.left_press_on_selected = False
         self.line_start_xy: Optional[tuple] = None
+        self.snap_endpoint: Optional[tuple] = None   # (stroke_idx, img_pt)
+        self._snap_activated: bool = False
+        self._line_stopped: bool = False
         self.selected_anchor_index: int = -1
         self.anchor_drag_active: bool = False
         self._ignore_list_selection = False
@@ -242,9 +245,31 @@ class MainWindow(QMainWindow):
 
     def _on_pointer_move(self, x: float, y: float):
         self.last_pointer = (x, y)
+        self.snap_endpoint = self._find_snap_endpoint(x, y)
 
     def _on_pointer_leave(self):
         self.last_pointer = None
+        self.snap_endpoint = None
+
+    def _find_snap_endpoint(self, canvas_x: float, canvas_y: float) -> Optional[tuple]:
+        """Return (stroke_idx, img_pt) if the cursor is near any stroke endpoint in Brush mode."""
+        if self.active_tool != ToolMode.BRUSH:
+            return None
+        if not self.inside_image_canvas(canvas_x, canvas_y):
+            return None
+        tol_img = 16.0 / max(self.scale, 0.0001)
+        img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+        best = None
+        best_d = None
+        for i, stroke in enumerate(self.doc.strokes):
+            if not stroke.points:
+                continue
+            for pt in (stroke.points[0], stroke.points[-1]):
+                d = dist((img_x, img_y), pt)
+                if d <= tol_img and (best_d is None or d < best_d):
+                    best_d = d
+                    best = (i, pt)
+        return best
 
     def get_canvas_view(self) -> CanvasView:
         return CanvasView(
@@ -261,6 +286,7 @@ class MainWindow(QMainWindow):
             active_tool=self.active_tool,
             line_start_xy=self.line_start_xy,
             selected_anchor_index=self.selected_anchor_index,
+            snap_endpoint_xy=self.snap_endpoint[1] if self.snap_endpoint else None,
         )
 
     def _sync_document_settings_from_sidebar(self):
@@ -420,6 +446,8 @@ class MainWindow(QMainWindow):
 
     def set_active_tool(self, tool) -> None:
         self.active_tool = ToolMode(tool) if not isinstance(tool, ToolMode) else tool
+        self.snap_endpoint = None
+        self._line_stopped = False
         if self.active_tool != ToolMode.BRUSH:
             self.line_start_xy = None
         if self.active_tool != ToolMode.PATH:
@@ -528,6 +556,20 @@ class MainWindow(QMainWindow):
         self.doc.current_points = []
         self.last_img_xy = None
         self.is_painting = False
+        self._snap_activated = False
+
+        if self.snap_endpoint is not None:
+            # Hovering over a stroke endpoint — resume drawing from there.
+            stroke_idx, snap_pt = self.snap_endpoint
+            if stroke_idx != self.doc.selected_stroke_index:
+                self.select_stroke_by_index(stroke_idx, refresh_preview=False)
+            self.line_start_xy = snap_pt
+            self._snap_activated = True
+            self._line_stopped = False
+        elif self._line_stopped:
+            # Line was stopped and user clicked outside any endpoint → new stroke.
+            self.select_stroke_by_index(-1, refresh_preview=False)
+            self._line_stopped = False
 
     def _brush_move(self, canvas_x: float, canvas_y: float) -> None:
         if self.left_press_img_xy is None:
@@ -538,6 +580,8 @@ class MainWindow(QMainWindow):
             if move_dist < max(6, int(self.doc.current_brush_size * 0.08)):
                 return
             self.line_start_xy = None  # cancel pending line mode on drag
+            self._snap_activated = False
+            self._line_stopped = False
             self.is_painting = True
             self.doc.current_points = [self.left_press_img_xy, (img_x, img_y)]
             self.last_img_xy = (img_x, img_y)
@@ -558,10 +602,17 @@ class MainWindow(QMainWindow):
             else True
         )
 
+        snap_click = self._snap_activated and not self.is_painting
+        self._snap_activated = False
+
         if self.is_painting and self.doc.current_points:
             cleaned = self.doc.finalize_stroke_points(self.doc.current_points, self.doc.current_brush_size)
             if len(cleaned) >= 2:
                 self._commit_brush_points(cleaned)
+        elif snap_click:
+            # User clicked an endpoint to arm continuation — line_start_xy is already set.
+            # Nothing to commit yet; the next click will draw from here.
+            pass
         elif is_click and release_xy:
             if self.line_start_xy is None:
                 self.line_start_xy = release_xy
@@ -644,6 +695,13 @@ class MainWindow(QMainWindow):
         self.anchor_drag_active = False
 
     def start_erase_interaction(self, canvas_x: float, canvas_y: float):
+        # In Brush mode, right-click stops the active line chain instead of erasing.
+        if self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
+            self.line_start_xy = None
+            self._snap_activated = False
+            self._line_stopped = True   # next non-snap click will start a new stroke
+            self.canvas.update()
+            return
         if not self.inside_image_canvas(canvas_x, canvas_y):
             return
         img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
