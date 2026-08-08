@@ -34,6 +34,8 @@ class SidebarPanel(QWidget):
     preview_mode_changed = Signal()
     update_now = Signal()
     tool_changed = Signal(object)
+    zoom_mode_changed = Signal(bool)
+    guide_suppress_changed = Signal(bool)
 
     def __init__(self, settings: Settings, swatch_colors: list[str], image_metadata: ImageMetadata | None = None):
         super().__init__()
@@ -69,6 +71,11 @@ class SidebarPanel(QWidget):
         self.metadata_copy_edit = QLineEdit(settings.metadata_copy_text)
         self.metadata_copy_edit.setPlaceholderText("Additional copy info (optional)")
         self._add_form_row(image_layout, "Copy", self.metadata_copy_edit, label_width=52)
+
+        self.zoom_toggle_btn = QPushButton("Fit")
+        self.zoom_toggle_btn.setCheckable(True)
+        self.zoom_toggle_btn.setToolTip("Toggle between fit-to-window and 100% (actual size) preview")
+        image_layout.addWidget(self.zoom_toggle_btn)
 
         layout.addWidget(SectionHeader("Tools"))
         tools_row = QHBoxLayout()
@@ -259,6 +266,12 @@ class SidebarPanel(QWidget):
         self.repeat_text_check.toggled.connect(self._update_repeat_spacing_enabled)
         self.repeat_spacing_spin.valueChanged.connect(emit_controls)
 
+        self.zoom_toggle_btn.toggled.connect(self._on_zoom_toggled)
+
+        for row in (self.opacity_row, self.brush_row):
+            row.slider.dragStarted.connect(lambda: self.guide_suppress_changed.emit(True))
+            row.slider.dragEnded.connect(lambda: self.guide_suppress_changed.emit(False))
+
         self.pointer_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.POINTER))
         self.brush_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.BRUSH))
         self.path_btn.clicked.connect(lambda: self.tool_changed.emit(ToolMode.PATH))
@@ -281,6 +294,10 @@ class SidebarPanel(QWidget):
 
     def _update_repeat_spacing_enabled(self):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())
+
+    def _on_zoom_toggled(self, checked: bool):
+        self.zoom_toggle_btn.setText("100%" if checked else "Fit")
+        self.zoom_mode_changed.emit(checked)
 
     def set_brush_context(self, *, layer_name: str | None = None, visible: bool = True):
         if layer_name is None:

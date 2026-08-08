@@ -183,6 +183,21 @@ def app_stylesheet() -> str:
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
     }}
+    QScrollArea#CanvasScrollArea, QScrollArea#CanvasScrollArea > QWidget > QWidget {{
+        background: {CANVAS_BG};
+    }}
+    QScrollArea#CanvasScrollArea QScrollBar:horizontal {{
+        height: 8px;
+        background: {PANEL};
+    }}
+    QScrollArea#CanvasScrollArea QScrollBar::handle:horizontal {{
+        background: {BORDER};
+        min-width: 24px;
+        border-radius: 4px;
+    }}
+    QScrollArea#CanvasScrollArea QScrollBar::add-line:horizontal, QScrollArea#CanvasScrollArea QScrollBar::sub-line:horizontal {{
+        width: 0px;
+    }}
     QCheckBox {{
         spacing: 8px;
         font-size: 11px;

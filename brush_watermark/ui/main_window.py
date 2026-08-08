@@ -48,6 +48,11 @@ class MainWindow(QMainWindow):
         self.offset_x = 0.0
         self.offset_y = 0.0
         self.refresh_pending = False
+        self.zoom_is_fit = True
+        self.suppress_guides = False
+        self._wheel_guide_timer = QTimer(self)
+        self._wheel_guide_timer.setSingleShot(True)
+        self._wheel_guide_timer.timeout.connect(self._clear_wheel_guide_suppress)
 
         self.active_tool = ToolMode.BRUSH
         self.is_painting = False
@@ -136,7 +141,14 @@ class MainWindow(QMainWindow):
             text_span_info=self.doc.text_span_info,
             on_double_click=self.handle_double_click,
         )
-        root.addWidget(self.canvas, 1)
+
+        self.canvas_scroll = QScrollArea()
+        self.canvas_scroll.setObjectName("CanvasScrollArea")
+        self.canvas_scroll.setWidgetResizable(True)
+        self.canvas_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.canvas_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.canvas_scroll.setWidget(self.canvas)
+        root.addWidget(self.canvas_scroll, 1)
 
         self.sidebar_scroll = QScrollArea()
         self.sidebar_scroll.setWidgetResizable(True)
@@ -161,6 +173,8 @@ class MainWindow(QMainWindow):
         self.sidebar.preview_mode_changed.connect(self.on_preview_mode_changed)
         self.sidebar.update_now.connect(self.start_auto_update)
         self.sidebar.tool_changed.connect(self.set_active_tool)
+        self.sidebar.zoom_mode_changed.connect(self.on_zoom_mode_changed)
+        self.sidebar.guide_suppress_changed.connect(self.set_guide_suppressed)
 
     def _start_update_check(self):
         self.sidebar.set_version_info(__version__)
@@ -289,6 +303,7 @@ class MainWindow(QMainWindow):
             selected_anchor_index=self.selected_anchor_index,
             snap_endpoint_xy=self.snap_endpoint[1] if self.snap_endpoint else None,
             is_drawing=self.is_painting,
+            suppress_guides=self.suppress_guides,
         )
 
     def _sync_document_settings_from_sidebar(self):
@@ -375,12 +390,27 @@ class MainWindow(QMainWindow):
 
     def handle_wheel(self, step: int, alt: bool):
         sb = self.sidebar
+        self.suppress_guides = True
+        self.canvas.update()
+        self._wheel_guide_timer.start(400)
         if alt:
             value = clamp(sb.brush_row.slider.value() + step * 12, 5, 600)
             sb.brush_row.slider.setValue(int(value))
         else:
             value = clamp(sb.opacity_row.slider.value() + step * 2, 1, 100)
             sb.opacity_row.slider.setValue(int(value))
+
+    def _clear_wheel_guide_suppress(self):
+        self.suppress_guides = False
+        self.canvas.update()
+
+    def on_zoom_mode_changed(self, is_100: bool):
+        self.zoom_is_fit = not is_100
+        self.refresh_preview()
+
+    def set_guide_suppressed(self, suppressed: bool):
+        self.suppress_guides = suppressed
+        self.canvas.update()
 
     def select_stroke_by_index(self, index: int, refresh_preview: bool = True):
         self.doc.select_stroke(index)
@@ -419,18 +449,22 @@ class MainWindow(QMainWindow):
     def refresh_preview(self):
         self.refresh_pending = False
         self.update_labels()
-        canvas_w = max(1, self.canvas.width())
-        canvas_h = max(1, self.canvas.height())
+        viewport = self.canvas_scroll.viewport()
+        canvas_w = max(1, viewport.width())
+        canvas_h = max(1, viewport.height())
         include_metadata = (
             not self.sidebar.show_original_preview()
             and self.doc.settings.add_visible_metadata
         )
         content_w, content_h = self.doc.preview_content_size(include_metadata=include_metadata)
-        # Fit the image to the canvas, but never upscale past 1:1 (100%). A small
-        # image (e.g. 100px) stays at its native pixel size instead of being blown
-        # up to the monitor resolution, which avoids a blurry/pixelated preview.
-        fit_scale = min(canvas_w / content_w, canvas_h / content_h)
-        self.scale = max(0.0001, min(fit_scale, 1.0))
+        if self.zoom_is_fit:
+            # Fit the image to the canvas, but never upscale past 1:1 (100%). A small
+            # image (e.g. 100px) stays at its native pixel size instead of being blown
+            # up to the monitor resolution, which avoids a blurry/pixelated preview.
+            fit_scale = min(canvas_w / content_w, canvas_h / content_h)
+            self.scale = max(0.0001, min(fit_scale, 1.0))
+        else:
+            self.scale = 1.0
         self.display_w = max(1, int(self.doc.full_w * self.scale))
         self.display_h = max(1, int(self.doc.full_h * self.scale))
         if self.sidebar.show_original_preview():
@@ -438,6 +472,21 @@ class MainWindow(QMainWindow):
         else:
             preview_image = self.doc.make_preview_image(self.display_w, self.display_h, self.scale)
         pixmap_w, pixmap_h = preview_image.size
+
+        if self.zoom_is_fit:
+            self.canvas_scroll.setWidgetResizable(True)
+            self.canvas_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.canvas_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.canvas.setMinimumSize(400, 300)
+            self.canvas.setMaximumSize(16777215, 16777215)
+        else:
+            self.canvas_scroll.setWidgetResizable(False)
+            self.canvas_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.canvas_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            canvas_w = max(pixmap_w, canvas_w)
+            canvas_h = max(pixmap_h, canvas_h)
+            self.canvas.setFixedSize(canvas_w, canvas_h)
+
         self.offset_x = (canvas_w - pixmap_w) // 2
         self.offset_y = (canvas_h - pixmap_h) // 2
         self.preview_pixmap = pil_to_qpixmap(preview_image)
@@ -460,6 +509,7 @@ class MainWindow(QMainWindow):
         if self.active_tool != ToolMode.PATH:
             self.selected_anchor_index = -1
             self.anchor_drag_active = False
+            self.suppress_guides = False
         self.sidebar.set_active_tool(self.active_tool)
         self.canvas.update()
 
@@ -699,7 +749,9 @@ class MainWindow(QMainWindow):
         if anchor_idx >= 0:
             self.selected_anchor_index = anchor_idx
             self.anchor_drag_active = True
+            self.suppress_guides = True
             self.last_img_xy = (img_x, img_y)
+            self.canvas.update()
         else:
             self.selected_anchor_index = -1
 
@@ -714,6 +766,8 @@ class MainWindow(QMainWindow):
     def _path_release(self, canvas_x: float, canvas_y: float) -> None:
         if self.anchor_drag_active:
             self.anchor_drag_active = False
+            self.suppress_guides = False
+            self.canvas.update()
             self.refresh_stroke_list()
             self.schedule_preview()
         elif self.left_press_img_xy is not None and not self._layer_selected():

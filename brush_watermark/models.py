@@ -121,3 +121,4 @@ class CanvasView:
     selected_anchor_index: int = -1
     snap_endpoint_xy: Optional[Point] = None
     is_drawing: bool = False
+    suppress_guides: bool = False

@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QRect, QRectF
+from PySide6.QtCore import Qt, QRect, QRectF, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -103,6 +103,9 @@ class LightroomSlider(QSlider):
     TRACK_HEIGHT = 2
     HANDLE_RADIUS = 4
 
+    dragStarted = Signal()
+    dragEnded = Signal()
+
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent: QWidget | None = None):
         super().__init__(orientation, parent)
         self.setFixedHeight(18)
@@ -138,12 +141,17 @@ class LightroomSlider(QSlider):
 
     def mousePressEvent(self, event):
         self._move_to(event.position().x())
+        self.dragStarted.emit()
         event.accept()
 
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.MouseButton.LeftButton:
             self._move_to(event.position().x())
         event.accept()
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self.dragEnded.emit()
 
     def _move_to(self, x: float):
         track_left = self.MARGIN_H

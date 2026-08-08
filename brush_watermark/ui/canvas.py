@@ -92,13 +92,14 @@ class CanvasWidget(QWidget):
         p.setPen(pen)
         p.drawPath(path)
 
-    def _draw_stroke_selection_guide(self, p: QPainter, points: list, label: str):
+    def _draw_stroke_selection_guide(
+        self, p: QPainter, points: list, label: str, suppress_line: bool = False
+    ):
         if len(points) < 2:
             return
         guide_alpha = 128
         guide_color = QColor(HANDLE)
         guide_color.setAlpha(guide_alpha)
-        self._draw_polyline(p, points, HANDLE, 1.0, dashed=True, alpha=guide_alpha)
 
         sx, sy = points[0]
         ex, ey = points[-1]
@@ -109,6 +110,11 @@ class CanvasWidget(QWidget):
         p.setBrush(Qt.NoBrush)
         p.drawEllipse(QPointF(scx, scy), 4, 4)
         p.drawEllipse(QPointF(ecx, ecy), 4, 4)
+
+        if suppress_line:
+            return
+
+        self._draw_polyline(p, points, HANDLE, 1.0, dashed=True, alpha=guide_alpha)
         p.setPen(guide_color)
         p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         p.drawText(QPointF(scx + 6, scy - 8), label)
@@ -147,7 +153,9 @@ class CanvasWidget(QWidget):
             if view.active_tool == ToolMode.PATH:
                 self._draw_anchor_handles(p, view, stroke)
             else:
-                self._draw_stroke_selection_guide(p, stroke.points, stroke.name)
+                self._draw_stroke_selection_guide(
+                    p, stroke.points, stroke.name, suppress_line=view.suppress_guides
+                )
 
         if len(view.current_points) >= 2:
             width = max(2.0, view.current_brush_size * max(view.scale, 0.0001) * 0.08)
@@ -169,7 +177,7 @@ class CanvasWidget(QWidget):
 
     def _draw_anchor_handles(self, p: QPainter, view: CanvasView, stroke):
         """Draw the smooth curve plus square handles at the editable anchors."""
-        if len(stroke.points) >= 2:
+        if len(stroke.points) >= 2 and not view.suppress_guides:
             self._draw_polyline(p, stroke.points, HANDLE, 1.0, dashed=True, alpha=160)
 
         anchors = stroke.anchors if stroke.anchors else stroke.points
