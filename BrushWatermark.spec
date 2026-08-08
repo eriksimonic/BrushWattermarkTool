@@ -27,7 +27,6 @@ _PYSIDE6_UNUSED = [
 ]
 
 _EXCLUDES = [
-    "numpy",
     "tkinter",
     "pytest",
     "unittest",
@@ -44,8 +43,6 @@ _EXCLUDES = [
 ]
 
 _COMMON_DROP_FRAGMENTS = (
-    "numpy",
-    "numpy.libs",
     "pil/_imagingtk",
     "pil\\_imagingtk",
     "pil/_avif",
@@ -92,6 +89,16 @@ def _drop_artifact(name: str) -> bool:
     return any(fragment in normalized for fragment in _DROP_BINARY_FRAGMENTS)
 
 
+# UPX has a history of corrupting onnxruntime's compiled extension and
+# shared libraries; leave them uncompressed rather than risk a build that
+# imports but crashes at inference time.
+_UPX_EXCLUDE = [
+    "onnxruntime_pybind11_state*",
+    "onnxruntime*.dll",
+    "libonnxruntime*",
+]
+
+
 if IS_WIN:
     _exe_icon = "brush_watermark/assets/icon.ico"
 elif IS_MAC:
@@ -103,8 +110,17 @@ a = Analysis(
     ["brush_watermark/__main__.py"],
     pathex=[],
     binaries=[],
-    datas=[("brush_watermark/assets/icon.png", "brush_watermark/assets")],
-    hiddenimports=["PIL.ImageQt"],
+    datas=[
+        ("brush_watermark/assets/icon.png", "brush_watermark/assets"),
+        ("brush_watermark/assets/salient_object.onnx", "brush_watermark/assets"),
+    ],
+    hiddenimports=[
+        "PIL.ImageQt",
+        "onnxruntime",
+        "onnxruntime.capi",
+        "onnxruntime.capi._pybind_state",
+        "onnxruntime.capi.onnxruntime_pybind11_state",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -127,7 +143,7 @@ _exe_kwargs = dict(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=_UPX_EXCLUDE,
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
@@ -148,7 +164,7 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=_UPX_EXCLUDE,
     name="BrushWatermark",
 )
 

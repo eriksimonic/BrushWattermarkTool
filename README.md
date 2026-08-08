@@ -149,6 +149,15 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+## Third-party assets
+
+`brush_watermark/assets/salient_object.onnx` is the U^2-Netp model from
+[danielgatis/rembg](https://github.com/danielgatis/rembg)
+(originally [xuebinqin/U-2-Net](https://github.com/xuebinqin/U-2-Net)),
+licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+It is used locally and offline to find each photo's focal subject for the
+auto-watermark feature — no image data or network calls are involved.
+
 ## Releases
 
 Pushing Python changes (`.py` files) to `main` triggers the GitHub Actions release workflow: tests, bump the minor version, build platform packages (`BrushWatermark.zip`, `BrushWatermark-macOS.zip`, `BrushWatermark-Linux.tar.gz`) with that version embedded, publish the GitHub release, then commit the version back to `main`. Pushes that only change other files (docs, config, assets, etc.) do not create a release. The app checks GitHub at startup; packaged Windows builds also offer a **Download and install update** button when a newer release is available.

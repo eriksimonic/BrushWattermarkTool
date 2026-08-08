@@ -16,12 +16,15 @@ from brush_watermark.geometry.points import clamp, dist, find_anchor_index
 from brush_watermark.models import CanvasView, Settings, ToolMode
 from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
+from brush_watermark.services.adaptive_strength import opacity_for_path
 from brush_watermark.services.auto_update import can_auto_update
+from brush_watermark.services.auto_watermark import add_paths_as_strokes
 from brush_watermark.services.document import Document
 from brush_watermark.services.explorer_context import MENU_TEXT, install_context_menu, uninstall_context_menu
 from brush_watermark.services.export import build_watermarked_copy_path
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
+from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
 from brush_watermark.ui.sidebar import SidebarPanel
 from brush_watermark.ui.styles import app_stylesheet
@@ -71,6 +74,7 @@ class MainWindow(QMainWindow):
         self._update_checker: UpdateChecker | None = None
         self._auto_updater: AutoUpdater | None = None
         self._update_result: UpdateCheckResult | None = None
+        self._auto_watermark_worker: AutoWatermarkWorker | None = None
 
         self.setWindowTitle(f"{APP_NAME} - {self.doc.image_path.name}")
         self.resize(1560, 980)
@@ -175,6 +179,7 @@ class MainWindow(QMainWindow):
         self.sidebar.tool_changed.connect(self.set_active_tool)
         self.sidebar.zoom_mode_changed.connect(self.on_zoom_mode_changed)
         self.sidebar.guide_suppress_changed.connect(self.set_guide_suppressed)
+        self.sidebar.auto_place_requested.connect(self.start_auto_watermark)
 
     def _start_update_check(self):
         self.sidebar.set_version_info(__version__)
@@ -229,6 +234,34 @@ class MainWindow(QMainWindow):
             APP_NAME,
             f"Could not install the update.\n\n{message}",
         )
+
+    def start_auto_watermark(self, density: int):
+        if self._auto_watermark_worker is not None:
+            return
+        self.sidebar.set_auto_watermark_running(True)
+        worker = AutoWatermarkWorker(self.doc.original, density, self)
+        worker.completed.connect(self._on_auto_watermark_completed)
+        worker.failed.connect(self._on_auto_watermark_failed)
+        self._auto_watermark_worker = worker
+        worker.start()
+
+    def _on_auto_watermark_completed(self, paths: list):
+        self._auto_watermark_worker = None
+        self.sidebar.set_auto_watermark_running(False)
+        added = add_paths_as_strokes(self.doc, paths)
+        if added:
+            self.sidebar.set_auto_watermark_status(f"Placed {len(added)} watermark(s).")
+            self.refresh_stroke_list()
+            self.schedule_preview()
+        else:
+            self.sidebar.set_auto_watermark_status(
+                "No suitable busy areas found away from the subject."
+            )
+
+    def _on_auto_watermark_failed(self, message: str):
+        self._auto_watermark_worker = None
+        self.sidebar.set_auto_watermark_running(False)
+        self.sidebar.set_auto_watermark_status(f"Auto-placement failed: {message}")
 
     def install_explorer_context_menu(self):
         try:
@@ -716,10 +749,15 @@ class MainWindow(QMainWindow):
             self.refresh_stroke_list()
         else:
             controls = self.sidebar.read_stroke_controls()
+            opacity = controls["opacity"]
+            if self.doc.settings.auto_strength:
+                opacity = opacity_for_path(
+                    self.doc.original, points, self.doc.current_brush_size, controls["mask_softness"]
+                )
             self.doc.add_stroke(
                 points,
                 self.doc.current_brush_size,
-                controls["opacity"],
+                opacity,
                 controls["blend_mode"],
                 controls["text_color"],
                 controls["angle_offset"],

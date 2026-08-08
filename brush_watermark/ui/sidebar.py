@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from brush_watermark.models import Settings, Stroke, ToolMode
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import available_font_names
+from brush_watermark.services.auto_watermark import DEFAULT_DENSITY, MAX_DENSITY, MIN_DENSITY
 from brush_watermark.services.exif_metadata import ImageMetadata
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
@@ -36,6 +37,7 @@ class SidebarPanel(QWidget):
     tool_changed = Signal(object)
     zoom_mode_changed = Signal(bool)
     guide_suppress_changed = Signal(bool)
+    auto_place_requested = Signal(int)
 
     def __init__(self, settings: Settings, swatch_colors: list[str], image_metadata: ImageMetadata | None = None):
         super().__init__()
@@ -128,6 +130,26 @@ class SidebarPanel(QWidget):
         self._add_form_row(watermark_layout, "Font", self.font_combo)
         watermark_layout.addWidget(self.auto_fit_check)
 
+        layout.addWidget(SectionHeader("Auto Watermark"))
+        auto_watermark_layout = QVBoxLayout()
+        auto_watermark_layout.setSpacing(4)
+        layout.addLayout(auto_watermark_layout)
+
+        self.auto_density_row = SliderRow("Density", MIN_DENSITY, MAX_DENSITY, DEFAULT_DENSITY)
+        auto_watermark_layout.addWidget(self.auto_density_row)
+
+        self.auto_place_btn = QPushButton("Auto-Place Watermarks")
+        self.auto_place_btn.setToolTip(
+            "Find busy, detail-rich areas that avoid the photo's focal subject "
+            "and drop several faint, low-opacity watermarks there."
+        )
+        auto_watermark_layout.addWidget(self.auto_place_btn)
+
+        self.auto_watermark_status_label = QLabel()
+        self.auto_watermark_status_label.setObjectName("HintLabel")
+        self.auto_watermark_status_label.setWordWrap(True)
+        auto_watermark_layout.addWidget(self.auto_watermark_status_label)
+
         self.brush_section = SectionHeader("Brush")
         layout.addWidget(self.brush_section)
         controls_layout = QVBoxLayout()
@@ -142,6 +164,13 @@ class SidebarPanel(QWidget):
         for mode_key, mode_label in BLEND_MODE_CHOICES:
             self.blend_combo.addItem(mode_label, mode_key)
 
+        self.auto_strength_check = BoxCheckBox("Auto strength (barely visible)")
+        self.auto_strength_check.setChecked(settings.auto_strength)
+        self.auto_strength_check.setToolTip(
+            "Compute each new stroke's strength from the pixels underneath it — "
+            "flat areas get a fainter mark, busy/textured areas can hide a stronger one. "
+            "Applies when a stroke is first drawn or auto-placed."
+        )
         self.opacity_row = SliderRow("Strength", 1, 100, settings.opacity)
         self.brush_row = SliderRow("Brush size", 5, 600, settings.brush_size)
         self.font_size_value_label = QLabel()
@@ -161,6 +190,7 @@ class SidebarPanel(QWidget):
         repeat_row.addWidget(self.repeat_spacing_spin)
 
         self._add_form_row(controls_layout, "Blend", self.blend_combo)
+        controls_layout.addWidget(self.auto_strength_check)
         controls_layout.addWidget(self.opacity_row)
         controls_layout.addWidget(self.brush_row)
         controls_layout.addWidget(self.font_size_value_label)
@@ -254,6 +284,8 @@ class SidebarPanel(QWidget):
         self.watermark_text_edit.textChanged.connect(emit_document)
         self.font_combo.currentTextChanged.connect(emit_document)
         self.auto_fit_check.toggled.connect(emit_document)
+        self.auto_strength_check.toggled.connect(emit_document)
+        self.auto_strength_check.toggled.connect(self._update_opacity_enabled)
         self.add_metadata_check.toggled.connect(emit_document)
         self.metadata_copy_edit.textChanged.connect(emit_document)
 
@@ -267,6 +299,14 @@ class SidebarPanel(QWidget):
         self.repeat_spacing_spin.valueChanged.connect(emit_controls)
 
         self.zoom_toggle_btn.toggled.connect(self._on_zoom_toggled)
+
+        self.auto_density_row.slider.valueChanged.connect(
+            lambda v: self.auto_density_row.set_value_text(str(v))
+        )
+        self.auto_density_row.set_value_text(str(self.auto_density_row.slider.value()))
+        self.auto_place_btn.clicked.connect(
+            lambda: self.auto_place_requested.emit(self.auto_density_row.slider.value())
+        )
 
         for row in (self.opacity_row, self.brush_row):
             row.slider.dragStarted.connect(lambda: self.guide_suppress_changed.emit(True))
@@ -288,12 +328,16 @@ class SidebarPanel(QWidget):
         self.show_original_check.toggled.connect(lambda *_: self.preview_mode_changed.emit())
         self.update_now_button.clicked.connect(self.update_now.emit)
         self._update_repeat_spacing_enabled()
+        self._update_opacity_enabled()
 
     def show_original_preview(self) -> bool:
         return bool(self.show_original_check.isChecked())
 
     def _update_repeat_spacing_enabled(self):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())
+
+    def _update_opacity_enabled(self):
+        self.opacity_row.setEnabled(not self.auto_strength_check.isChecked())
 
     def _on_zoom_toggled(self, checked: bool):
         self.zoom_toggle_btn.setText("100%" if checked else "Fit")
@@ -372,6 +416,7 @@ class SidebarPanel(QWidget):
             mask_softness=tool_defaults.mask_softness,
             text_color=tool_defaults.text_color,
             auto_fit_text=bool(self.auto_fit_check.isChecked()),
+            auto_strength=bool(self.auto_strength_check.isChecked()),
             repeat_text=tool_defaults.repeat_text,
             repeat_spacing=tool_defaults.repeat_spacing,
             blend_mode=tool_defaults.blend_mode,
@@ -438,6 +483,17 @@ class SidebarPanel(QWidget):
 
     def set_slider_value(self, row: SliderRow, value_text: str):
         row.set_value_text(value_text)
+
+    def set_auto_watermark_running(self, running: bool):
+        self.auto_place_btn.setEnabled(not running)
+        self.auto_density_row.setEnabled(not running)
+        if running:
+            self.auto_watermark_status_label.setText("Analyzing photo…")
+            self._refresh_layout()
+
+    def set_auto_watermark_status(self, text: str):
+        self.auto_watermark_status_label.setText(text)
+        self._refresh_layout()
 
     def _add_form_row(self, layout: QVBoxLayout, label_text: str, widget: QWidget, label_width: int = 52):
         row = QHBoxLayout()
