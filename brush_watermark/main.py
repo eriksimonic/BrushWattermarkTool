@@ -55,6 +55,7 @@ def resolve_image_path() -> Optional[Path]:
 
 
 def main() -> int:
+
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
