@@ -20,7 +20,7 @@ _PYSIDE6_UNUSED = [
         "QtPrintSupport", "QtQml", "QtQuick", "QtQuick3D", "QtQuickControls2",
         "QtQuickTest", "QtQuickWidgets", "QtRemoteObjects", "QtScxml", "QtSensors",
         "QtSerialBus", "QtSerialPort", "QtSpatialAudio", "QtSql", "QtStateMachine",
-        "QtSvg", "QtSvgWidgets", "QtTest", "QtTextToSpeech", "QtUiTools",
+        "QtSvgWidgets", "QtTest", "QtTextToSpeech", "QtUiTools",
         "QtWebChannel", "QtWebEngineCore", "QtWebEngineQuick", "QtWebEngineWidgets",
         "QtWebSockets", "QtWebView", "QtXml",
     )
@@ -113,6 +113,7 @@ a = Analysis(
     datas=[
         ("brush_watermark/assets/icon.png", "brush_watermark/assets"),
         ("brush_watermark/assets/salient_object.onnx", "brush_watermark/assets"),
+        ("brush_watermark/assets/icons", "brush_watermark/assets/icons"),
     ],
     hiddenimports=[
         "PIL.ImageQt",
@@ -120,6 +121,7 @@ a = Analysis(
         "onnxruntime.capi",
         "onnxruntime.capi._pybind_state",
         "onnxruntime.capi.onnxruntime_pybind11_state",
+        "PySide6.QtSvg",
     ],
     hookspath=[],
     hooksconfig={},

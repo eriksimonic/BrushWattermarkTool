@@ -1,5 +1,4 @@
 from PySide6.QtCore import Qt, QRect, QRectF, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -11,33 +10,104 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PySide6.QtGui import QColor, QPainter, QPen
 
-from brush_watermark.ui.design_tokens import BORDER, HANDLE, SLIDER_HANDLE, TRACK
+from brush_watermark.ui.design_tokens import (
+    ACCENT,
+    BORDER,
+    ON_ACCENT,
+    SLIDER_HANDLE,
+    TEXT_SECONDARY,
+    TRACK,
+)
+from brush_watermark.ui.icons import get_icon, get_pixmap
 
 
-class SectionHeader(QWidget):
-    def __init__(self, title: str, parent: QWidget | None = None):
+class _HeaderRow(QWidget):
+    """Clickable row — used internally by CollapsibleSection."""
+
+    clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        row = QHBoxLayout(self)
-        row.setContentsMargins(0, 6, 0, 4)
-        row.setSpacing(8)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        left = QFrame()
-        left.setFrameShape(QFrame.Shape.HLine)
-        left.setObjectName("SectionDivider")
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        event.accept()
 
-        label = QLabel(title)
-        label.setObjectName("SectionHeader")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_label = label
 
-        right = QFrame()
-        right.setFrameShape(QFrame.Shape.HLine)
-        right.setObjectName("SectionDivider")
+class CollapsibleSection(QWidget):
+    """A section header with a chevron that expands/collapses a body area.
 
-        row.addWidget(left, 1)
-        row.addWidget(label)
-        row.addWidget(right, 1)
+    Callers add their section content to `body_layout`.
+    """
+
+    toggled = Signal(bool)
+
+    CHEVRON_SIZE = 12
+    ICON_SIZE = 15
+
+    def __init__(
+        self,
+        title: str,
+        icon_name: str | None = None,
+        expanded: bool = True,
+        top_divider: bool = True,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._expanded = expanded
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 10 if top_divider else 0, 0, 8)
+        outer.setSpacing(8)
+
+        if top_divider:
+            divider = QFrame()
+            divider.setFrameShape(QFrame.Shape.HLine)
+            divider.setObjectName("SectionDivider")
+            outer.addWidget(divider)
+
+        header = _HeaderRow()
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+
+        self._chevron_label = QLabel()
+        self._chevron_label.setFixedWidth(self.CHEVRON_SIZE)
+        header_row.addWidget(self._chevron_label)
+
+        if icon_name:
+            icon_label = QLabel()
+            icon_label.setPixmap(get_pixmap(icon_name, self.ICON_SIZE, TEXT_SECONDARY))
+            header_row.addWidget(icon_label)
+
+        self._title_label = QLabel(title)
+        self._title_label.setObjectName("SectionHeader")
+        header_row.addWidget(self._title_label, 1)
+
+        header.clicked.connect(self._toggle)
+        outer.addWidget(header)
+
+        self._body = QWidget()
+        self.body_layout = QVBoxLayout(self._body)
+        self.body_layout.setContentsMargins(0, 2, 0, 0)
+        self.body_layout.setSpacing(7)
+        outer.addWidget(self._body)
+
+        self._update_chevron()
+        self._body.setVisible(self._expanded)
+
+    def _toggle(self):
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
+        self._update_chevron()
+        self.toggled.emit(self._expanded)
+
+    def _update_chevron(self):
+        name = "chevron-down" if self._expanded else "chevron-right"
+        self._chevron_label.setPixmap(get_pixmap(name, self.CHEVRON_SIZE, TEXT_SECONDARY))
 
     def set_title(self, title: str):
         self._title_label.setText(title)
@@ -64,8 +134,6 @@ class BoxCheckBox(QCheckBox):
 
             ix = int(indicator.x() + (indicator.width() - self.INDICATOR_SIZE) / 2)
             iy = int(indicator.y() + (indicator.height() - self.INDICATOR_SIZE) / 2)
-            inner_offset = self.BORDER + self.GAP
-            inner_size = self.INDICATOR_SIZE - 2 * inner_offset
 
             border = QColor(BORDER)
             if not self.isEnabled():
@@ -80,14 +148,24 @@ class BoxCheckBox(QCheckBox):
             )
 
             if self.isChecked():
-                fill = QColor(HANDLE)
+                fill = QColor(ACCENT)
                 if not self.isEnabled():
                     fill.setAlpha(128)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(fill)
-                painter.drawRect(
-                    QRect(ix + inner_offset, iy + inner_offset, inner_size, inner_size)
+                painter.drawRoundedRect(
+                    QRectF(ix + 0.5, iy + 0.5, self.INDICATOR_SIZE - 1, self.INDICATOR_SIZE - 1),
+                    self.RADIUS,
+                    self.RADIUS,
                 )
+                check_size = self.INDICATOR_SIZE - 2 * self.GAP
+                check_pixmap = get_pixmap("check", check_size, ON_ACCENT)
+                cx = ix + (self.INDICATOR_SIZE - check_size) // 2
+                cy = iy + (self.INDICATOR_SIZE - check_size) // 2
+                if not self.isEnabled():
+                    painter.setOpacity(0.5)
+                painter.drawPixmap(cx, cy, check_pixmap)
+                painter.setOpacity(1.0)
 
             label_opt = QStyleOptionButton(opt)
             label_opt.rect = contents
@@ -129,6 +207,10 @@ class LightroomSlider(QSlider):
         span = max(1, self.maximum() - self.minimum())
         ratio = (self.value() - self.minimum()) / span
         handle_center_x = track_left + ratio * track_width
+
+        fill_width = max(0, int(handle_center_x - track_left))
+        painter.setBrush(QColor(ACCENT))
+        painter.drawRoundedRect(track_left, track_y - 1, fill_width, self.TRACK_HEIGHT, 1, 1)
 
         painter.setBrush(QColor(SLIDER_HANDLE))
         painter.setPen(Qt.PenStyle.NoPen)

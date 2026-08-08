@@ -26,7 +26,7 @@ from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
-from brush_watermark.ui.sidebar import SidebarPanel
+from brush_watermark.ui.sidebar import SIDEBAR_WIDTH, SidebarPanel
 from brush_watermark.ui.styles import app_stylesheet
 from brush_watermark.ui.update_checker import UpdateChecker
 
@@ -158,7 +158,7 @@ class MainWindow(QMainWindow):
         self.sidebar_scroll.setWidgetResizable(True)
         self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.sidebar_scroll.setFixedWidth(340)
+        self.sidebar_scroll.setFixedWidth(SIDEBAR_WIDTH + 12)
         root.addWidget(self.sidebar_scroll)
 
         self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors, self.doc.metadata)

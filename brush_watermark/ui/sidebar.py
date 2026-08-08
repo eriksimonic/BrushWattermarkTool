@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -20,7 +20,13 @@ from brush_watermark.services.auto_watermark import DEFAULT_DENSITY, MAX_DENSITY
 from brush_watermark.services.exif_metadata import ImageMetadata
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.color_picker import ColorSwatchPicker
-from brush_watermark.ui.lightroom_controls import BoxCheckBox, SectionHeader, SliderRow
+from brush_watermark.ui.design_tokens import ON_ACCENT, TEXT
+from brush_watermark.ui.icons import get_icon, get_icon_checkable
+from brush_watermark.ui.lightroom_controls import BoxCheckBox, CollapsibleSection, SliderRow
+
+TOOL_ICON_SIZE = 18
+TOOL_BTN_SIZE = 28
+SIDEBAR_WIDTH = 368
 
 
 class SidebarPanel(QWidget):
@@ -42,20 +48,19 @@ class SidebarPanel(QWidget):
     def __init__(self, settings: Settings, swatch_colors: list[str], image_metadata: ImageMetadata | None = None):
         super().__init__()
         self._swatch_colors = swatch_colors
-        self.setFixedWidth(340)
+        self.setFixedWidth(SIDEBAR_WIDTH)
         self._build_ui(settings, image_metadata or ImageMetadata())
         self._connect_signals()
         self.load_tool_defaults(settings)
 
     def _build_ui(self, settings: Settings, image_metadata: ImageMetadata):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setContentsMargins(18, 14, 18, 16)
         layout.setSpacing(2)
 
-        layout.addWidget(SectionHeader("Image"))
-        image_layout = QVBoxLayout()
-        image_layout.setSpacing(4)
-        layout.addLayout(image_layout)
+        image_section = CollapsibleSection("Image", icon_name="image", top_divider=False)
+        layout.addWidget(image_section)
+        image_layout = image_section.body_layout
 
         serial_text = image_metadata.serial or "Not found in EXIF"
         self.serial_label = QLabel(f"Serial: {serial_text}")
@@ -75,17 +80,29 @@ class SidebarPanel(QWidget):
         self._add_form_row(image_layout, "Copy", self.metadata_copy_edit, label_width=52)
 
         self.zoom_toggle_btn = QPushButton("Fit")
+        self.zoom_toggle_btn.setObjectName("ChipButton")
         self.zoom_toggle_btn.setCheckable(True)
+        self.zoom_toggle_btn.setIcon(get_icon("maximize", 12, TEXT))
+        self.zoom_toggle_btn.setIconSize(QSize(12, 12))
         self.zoom_toggle_btn.setToolTip("Toggle between fit-to-window and 100% (actual size) preview")
-        image_layout.addWidget(self.zoom_toggle_btn)
+        zoom_row = QHBoxLayout()
+        zoom_row.setContentsMargins(0, 0, 0, 0)
+        zoom_row.addWidget(self.zoom_toggle_btn)
+        zoom_row.addStretch(1)
+        image_layout.addLayout(zoom_row)
 
-        layout.addWidget(SectionHeader("Tools"))
+        tools_section = CollapsibleSection("Tools", icon_name="wrench")
+        layout.addWidget(tools_section)
         tools_row = QHBoxLayout()
         tools_row.setSpacing(4)
-        self.pointer_btn = QPushButton("\u2196")   # ↖ arrow = pointer/select
-        self.brush_btn = QPushButton("\u270f")     # ✏ pencil = brush/draw
-        self.path_btn = QPushButton("\u25c7")      # ◇ diamond = anchor/path
-        self.eraser_btn = QPushButton("\u232b")    # ⌫ = eraser
+        self.pointer_btn = QPushButton()
+        self.brush_btn = QPushButton()
+        self.path_btn = QPushButton()
+        self.eraser_btn = QPushButton()
+        self.pointer_btn.setIcon(get_icon_checkable("mouse-pointer-2", TOOL_ICON_SIZE, TEXT, ON_ACCENT))
+        self.brush_btn.setIcon(get_icon_checkable("pencil", TOOL_ICON_SIZE, TEXT, ON_ACCENT))
+        self.path_btn.setIcon(get_icon_checkable("pen-tool", TOOL_ICON_SIZE, TEXT, ON_ACCENT))
+        self.eraser_btn.setIcon(get_icon_checkable("eraser", TOOL_ICON_SIZE, TEXT, ON_ACCENT))
         self.pointer_btn.setToolTip("Pointer — select and deselect strokes  (V)")
         self.brush_btn.setToolTip(
             "Brush — LEFT-drag=freehand · LEFT-click=straight-line points · "
@@ -96,9 +113,10 @@ class SidebarPanel(QWidget):
         )
         self.eraser_btn.setToolTip("Eraser — drag to erase watermark pixels  (E)")
         for btn in (self.pointer_btn, self.brush_btn, self.path_btn, self.eraser_btn):
+            btn.setObjectName("ToolBtn")
+            btn.setIconSize(QSize(TOOL_ICON_SIZE, TOOL_ICON_SIZE))
             btn.setCheckable(True)
-            btn.setFixedHeight(28)
-            btn.setFixedSize(36, 36)
+            btn.setFixedSize(TOOL_BTN_SIZE, TOOL_BTN_SIZE)
             tools_row.addWidget(btn)
         tools_row.addStretch(1)
         self._tool_group = QButtonGroup(self)
@@ -108,12 +126,11 @@ class SidebarPanel(QWidget):
         self._tool_group.addButton(self.path_btn)
         self._tool_group.addButton(self.eraser_btn)
         self.brush_btn.setChecked(True)
-        layout.addLayout(tools_row)
+        tools_section.body_layout.addLayout(tools_row)
 
-        layout.addWidget(SectionHeader("Watermark"))
-        watermark_layout = QVBoxLayout()
-        watermark_layout.setSpacing(4)
-        layout.addLayout(watermark_layout)
+        watermark_section = CollapsibleSection("Watermark", icon_name="stamp")
+        layout.addWidget(watermark_section)
+        watermark_layout = watermark_section.body_layout
 
         self.watermark_text_edit = QLineEdit(settings.watermark_text)
         self.font_combo = QComboBox()
@@ -130,10 +147,9 @@ class SidebarPanel(QWidget):
         self._add_form_row(watermark_layout, "Font", self.font_combo)
         watermark_layout.addWidget(self.auto_fit_check)
 
-        layout.addWidget(SectionHeader("Auto Watermark"))
-        auto_watermark_layout = QVBoxLayout()
-        auto_watermark_layout.setSpacing(4)
-        layout.addLayout(auto_watermark_layout)
+        auto_watermark_section = CollapsibleSection("Auto Watermark", icon_name="wand-2")
+        layout.addWidget(auto_watermark_section)
+        auto_watermark_layout = auto_watermark_section.body_layout
 
         self.auto_density_row = SliderRow("Density", MIN_DENSITY, MAX_DENSITY, DEFAULT_DENSITY)
         auto_watermark_layout.addWidget(self.auto_density_row)
@@ -150,11 +166,9 @@ class SidebarPanel(QWidget):
         self.auto_watermark_status_label.setWordWrap(True)
         auto_watermark_layout.addWidget(self.auto_watermark_status_label)
 
-        self.brush_section = SectionHeader("Brush")
+        self.brush_section = CollapsibleSection("Brush", icon_name="paintbrush")
         layout.addWidget(self.brush_section)
-        controls_layout = QVBoxLayout()
-        controls_layout.setSpacing(3)
-        layout.addLayout(controls_layout)
+        controls_layout = self.brush_section.body_layout
 
         self.color_picker = ColorSwatchPicker()
         self.color_picker.set_swatches(self._swatch_colors, settings.text_color)
@@ -197,10 +211,9 @@ class SidebarPanel(QWidget):
         controls_layout.addWidget(self.softness_row)
         controls_layout.addLayout(repeat_row)
 
-        layout.addWidget(SectionHeader("Layers"))
-        layers_layout = QVBoxLayout()
-        layers_layout.setSpacing(4)
-        layout.addLayout(layers_layout)
+        layers_section = CollapsibleSection("Layers", icon_name="layers")
+        layout.addWidget(layers_section)
+        layers_layout = layers_section.body_layout
 
         self.stroke_list = QListWidget()
         self.stroke_list.setFixedHeight(110)
@@ -210,7 +223,9 @@ class SidebarPanel(QWidget):
         layer_actions = QHBoxLayout()
         layer_actions.setSpacing(6)
         self.delete_selected_btn = QPushButton("Delete")
+        self.delete_selected_btn.setIcon(get_icon("trash-2", 14, TEXT))
         self.delete_all_btn = QPushButton("Clear all")
+        self.delete_all_btn.setIcon(get_icon("trash", 14, TEXT))
         layer_actions.addWidget(self.delete_selected_btn)
         layer_actions.addWidget(self.delete_all_btn)
         layers_layout.addLayout(layer_actions)
@@ -227,17 +242,19 @@ class SidebarPanel(QWidget):
         actions.addWidget(self.reveal_in_explorer_check)
         self.ok_button = QPushButton("Save and close")
         self.ok_button.setObjectName("PrimaryButton")
+        self.ok_button.setIcon(get_icon("save", 14, ON_ACCENT))
         self.save_copy_button = QPushButton("Save copy and close")
+        self.save_copy_button.setIcon(get_icon("copy", 14, TEXT))
         self.exit_button = QPushButton("Exit without saving")
+        self.exit_button.setIcon(get_icon("x", 14, TEXT))
         actions.addWidget(self.ok_button)
         actions.addWidget(self.save_copy_button)
         actions.addWidget(self.exit_button)
         layout.addLayout(actions)
 
-        layout.addWidget(SectionHeader("Help"))
-        help_layout = QVBoxLayout()
-        help_layout.setSpacing(2)
-        layout.addLayout(help_layout)
+        help_section = CollapsibleSection("Help", icon_name="help-circle")
+        layout.addWidget(help_section)
+        help_layout = help_section.body_layout
         help_text = QLabel(
             "V=Pointer: click to select/deselect · "
             "B=Brush: left-drag=freehand · left-click=straight line · "
@@ -259,6 +276,7 @@ class SidebarPanel(QWidget):
         help_layout.addWidget(self.update_status_label)
         self.update_now_button = QPushButton("Download and install update")
         self.update_now_button.setObjectName("PrimaryButton")
+        self.update_now_button.setIcon(get_icon("download", 14, ON_ACCENT))
         self.update_now_button.hide()
         help_layout.addWidget(self.update_now_button)
         self.update_progress_label = QLabel()
@@ -341,6 +359,8 @@ class SidebarPanel(QWidget):
 
     def _on_zoom_toggled(self, checked: bool):
         self.zoom_toggle_btn.setText("100%" if checked else "Fit")
+        icon_color = ON_ACCENT if checked else TEXT
+        self.zoom_toggle_btn.setIcon(get_icon("zoom-in" if checked else "maximize", 12, icon_color))
         self.zoom_mode_changed.emit(checked)
 
     def set_brush_context(self, *, layer_name: str | None = None, visible: bool = True):

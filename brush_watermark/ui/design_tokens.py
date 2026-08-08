@@ -1,4 +1,9 @@
-"""Lightroom-inspired UI tokens. Do not use navy or blue-gray Tailwind palettes."""
+"""Lightroom-inspired UI tokens with a blue accent layer for interactive states.
+
+ACCENT colors are for interactive/active affordances only (primary buttons,
+checked checkboxes/tool buttons, slider fill, focus rings) — do not use them
+for static chrome/panel backgrounds, body text, or list-row selection.
+"""
 
 CANVAS_BG = "#2A2A2A"
 CHROME = "#333333"
@@ -16,3 +21,8 @@ SELECTION = "#565656"
 SELECTION_BORDER = "#909090"
 LINK = "#A8C4DC"
 BUTTON_HOVER = "#4A4A4A"
+
+ACCENT = "#3D7FFF"
+ACCENT_HOVER = "#5C93FF"
+ACCENT_PRESSED = "#2E63CC"
+ON_ACCENT = "#FFFFFF"

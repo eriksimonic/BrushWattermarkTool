@@ -1,20 +1,26 @@
 from brush_watermark.ui.design_tokens import (
+    ACCENT,
+    ACCENT_HOVER,
+    ACCENT_PRESSED,
     BORDER,
     BUTTON_HOVER,
     CANVAS_BG,
     CHROME,
     DIVIDER,
-    HANDLE,
     INPUT,
     LINK,
+    ON_ACCENT,
     PANEL,
     SELECTION,
     SELECTION_BORDER,
     TEXT,
     TEXT_MUTED,
     TEXT_SECONDARY,
-    TRACK,
 )
+from brush_watermark.ui.icons import ICONS_DIR
+
+_CHEVRON_DOWN_PNG = (ICONS_DIR / "chevron-down-static.png").as_posix()
+_CHEVRON_UP_PNG = (ICONS_DIR / "chevron-up-static.png").as_posix()
 
 
 def app_stylesheet() -> str:
@@ -38,7 +44,7 @@ def app_stylesheet() -> str:
         font-size: 11px;
         font-weight: 600;
         color: {TEXT_SECONDARY};
-        padding: 0 4px;
+        padding: 0 2px;
     }}
     QFrame#SectionDivider {{
         background: {DIVIDER};
@@ -73,14 +79,14 @@ def app_stylesheet() -> str:
     QLineEdit, QComboBox, QListWidget, QSpinBox, QPushButton {{
         background: {INPUT};
         border: 1px solid {BORDER};
-        border-radius: 3px;
+        border-radius: 6px;
         color: {TEXT};
         font-size: 11px;
     }}
     QLineEdit, QComboBox {{
-        padding: 2px 6px;
-        min-height: 22px;
-        max-height: 22px;
+        padding: 4px 10px;
+        min-height: 24px;
+        max-height: 24px;
     }}
     QComboBox {{
         padding-right: 4px;
@@ -93,8 +99,9 @@ def app_stylesheet() -> str:
         border-left: 1px solid {BORDER};
     }}
     QComboBox::down-arrow {{
-        width: 8px;
-        height: 8px;
+        width: 10px;
+        height: 10px;
+        image: url({_CHEVRON_DOWN_PNG});
     }}
     QComboBox QAbstractItemView {{
         background: {INPUT};
@@ -104,7 +111,7 @@ def app_stylesheet() -> str:
         selection-color: {TEXT};
     }}
     QLineEdit:focus, QComboBox:focus, QListWidget:focus, QSpinBox:focus {{
-        border: 1px solid {SELECTION_BORDER};
+        border: 1px solid {ACCENT};
     }}
     QListWidget {{
         padding: 2px;
@@ -122,14 +129,42 @@ def app_stylesheet() -> str:
         border-left: 2px solid {SELECTION_BORDER};
     }}
     QSpinBox {{
-        padding: 1px 4px;
-        min-height: 20px;
-        max-height: 20px;
-    }}
-    QPushButton {{
-        padding: 3px 8px;
+        padding: 2px 6px;
         min-height: 22px;
         max-height: 22px;
+    }}
+    QSpinBox::up-button, QSpinBox::down-button {{
+        subcontrol-origin: border;
+        width: 14px;
+        background: transparent;
+        border: none;
+    }}
+    QSpinBox::up-button {{
+        subcontrol-position: top right;
+        margin-top: 1px;
+    }}
+    QSpinBox::down-button {{
+        subcontrol-position: bottom right;
+        margin-bottom: 1px;
+    }}
+    QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+        background: {BUTTON_HOVER};
+        border-radius: 3px;
+    }}
+    QSpinBox::up-arrow {{
+        width: 8px;
+        height: 8px;
+        image: url({_CHEVRON_UP_PNG});
+    }}
+    QSpinBox::down-arrow {{
+        width: 8px;
+        height: 8px;
+        image: url({_CHEVRON_DOWN_PNG});
+    }}
+    QPushButton {{
+        padding: 5px 12px;
+        min-height: 24px;
+        max-height: 24px;
         background: {INPUT};
     }}
     QPushButton:hover {{
@@ -137,30 +172,43 @@ def app_stylesheet() -> str:
         border-color: {SELECTION_BORDER};
     }}
     QPushButton#PrimaryButton {{
-        background: {SELECTION};
-        color: {TEXT};
-        border: 1px solid {BORDER};
+        background: {ACCENT};
+        color: {ON_ACCENT};
+        border: 1px solid {ACCENT};
         font-weight: 600;
     }}
     QPushButton#PrimaryButton:hover {{
+        background: {ACCENT_HOVER};
+        border-color: {ACCENT_HOVER};
+    }}
+    QPushButton#PrimaryButton:pressed {{
+        background: {ACCENT_PRESSED};
+        border-color: {ACCENT_PRESSED};
+    }}
+    QPushButton#ToolBtn {{
+        padding: 0px;
+        border-radius: 5px;
+    }}
+    QPushButton#ToolBtn:checked {{
+        background: {ACCENT};
+        border: 1px solid {ACCENT_PRESSED};
+    }}
+    QPushButton#ToolBtn:hover {{
         background: {BUTTON_HOVER};
         border-color: {SELECTION_BORDER};
     }}
-    QPushButton#ToolBtn {{
-        font-size: 32px;
-        font-family: 'Segoe UI Symbol', 'Segoe UI', Arial, sans-serif;
-        padding: 0px;
-        min-width: 48px;
-        max-width: 48px;
-        min-height: 48px;
-        max-height: 48px;
-        border-radius: 4px;
+    QPushButton#ChipButton {{
+        padding: 2px 10px;
+        min-height: 20px;
+        max-height: 20px;
+        border-radius: 10px;
     }}
-    QPushButton#ToolBtn:checked {{
-        background: {SELECTION};
-        border: 1px solid {SELECTION_BORDER};
+    QPushButton#ChipButton:checked {{
+        background: {ACCENT};
+        color: {ON_ACCENT};
+        border: 1px solid {ACCENT_PRESSED};
     }}
-    QPushButton#ToolBtn:hover {{
+    QPushButton#ChipButton:hover {{
         background: {BUTTON_HOVER};
         border-color: {SELECTION_BORDER};
     }}
@@ -210,17 +258,5 @@ def app_stylesheet() -> str:
         border: none;
         background: transparent;
         image: none;
-    }}
-    QSlider::groove:horizontal {{
-        border: 0;
-        height: 2px;
-        background: {TRACK};
-    }}
-    QSlider::handle:horizontal {{
-        background: {HANDLE};
-        border: 0;
-        width: 10px;
-        margin: -6px 0;
-        border-radius: 5px;
     }}
     """
