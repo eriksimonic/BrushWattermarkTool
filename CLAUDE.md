@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Keep this file and `README.md` in sync with the implementation.** When a change adds, removes, or moves a feature, command, or architectural piece, update both files in the same change — don't let them drift.
+>
+> When dispatching agents for codebase exploration/discovery (reading files to verify docs, locating code, answering "where is X" questions), prefer the Haiku model unless the task needs deeper reasoning.
+
 ## What this is
 
 Brush Watermark Tool — a PySide6 (Qt for Python) desktop app that paints brush-shaped text watermarks along a hand-drawn stroke path on JPG photos, styled after Adobe Lightroom Classic's dark UI. Each watermark is baked into the saved JPEG; original EXIF is preserved. Settings persist at `~/.lightroom_brush_watermark/settings.json`.

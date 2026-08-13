@@ -17,6 +17,8 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 - **Path editing** — drag anchors on the selected stroke, double-click a segment to add an anchor, Delete to remove one
 - **Per-layer control** — each stroke has its own color, blend mode, strength, brush size, softness, and repeat settings
 - **Repeat text** — optionally tile watermark text along long strokes, with adjustable gap
+- **Auto strength** — optionally compute each new stroke's strength from the pixels underneath it, so flat areas get a fainter mark and busy/textured areas can hide a stronger one
+- **Auto-place watermarks** — finds busy, detail-rich areas that avoid the photo's focal subject and drops several faint, low-opacity watermarks there, with an adjustable density
 - **Blend modes** — Normal, Soft light, Lighten, Darken, Difference, Overlay, Screen, Multiply, Hard light
 - **Image color picker** — 8 colors sampled from the photo, plus white, 50% gray, and black
 - **Eraser tool** — paint away watermark pixels without deleting strokes
@@ -106,7 +108,8 @@ Lightroom-style panels on the right: section dividers, label-left / value-right 
 - **Image** — camera serial from EXIF; optional **Add visible metadata strip** and custom copy text for the footer
 - **Tools** — Pointer, Brush, Path, and Eraser buttons
 - **Watermark** — text, font, and auto-fit (applies to all strokes)
-- **Brush** — color, blend mode, strength, brush size, softness, and repeat along stroke; sets **tool defaults** when nothing is selected, or edits the **selected layer** (section title shows `Layer · …`)
+- **Auto Watermark** — density slider and an **Auto-Place Watermarks** button that finds busy, detail-rich areas away from the photo's subject and drops several faint watermarks there automatically
+- **Brush** — color, blend mode, auto strength (computes opacity from the underlying pixels instead of a fixed value), strength, brush size, softness, and repeat along stroke; sets **tool defaults** when nothing is selected, or edits the **selected layer** (section title shows `Layer · …`)
 - **Layers** — stroke list; **Delete** or **Clear all**
 - **Help** — shortcuts, current version, and link to a newer release if one is available
 
