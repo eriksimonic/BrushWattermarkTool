@@ -246,6 +246,22 @@ def app_stylesheet() -> str:
     QScrollArea#CanvasScrollArea QScrollBar::add-line:horizontal, QScrollArea#CanvasScrollArea QScrollBar::sub-line:horizontal {{
         width: 0px;
     }}
+    QScrollArea#FilmstripArea, QScrollArea#FilmstripArea > QWidget > QWidget {{
+        background: {CANVAS_BG};
+        border-top: 1px solid {DIVIDER};
+    }}
+    QScrollArea#FilmstripArea QScrollBar:horizontal {{
+        height: 8px;
+        background: {CANVAS_BG};
+    }}
+    QScrollArea#FilmstripArea QScrollBar::handle:horizontal {{
+        background: {BORDER};
+        min-width: 24px;
+        border-radius: 4px;
+    }}
+    QScrollArea#FilmstripArea QScrollBar::add-line:horizontal, QScrollArea#FilmstripArea QScrollBar::sub-line:horizontal {{
+        width: 0px;
+    }}
     QCheckBox {{
         spacing: 8px;
         font-size: 11px;

@@ -1,3 +1,4 @@
+import dataclasses
 import os
 import sys
 from pathlib import Path
@@ -7,7 +8,16 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QMainWindow, QMessageBox, QScrollArea, QSizePolicy, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from brush_watermark import __version__
 from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
@@ -26,6 +36,7 @@ from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
+from brush_watermark.ui.filmstrip import THUMB_SIZE, FilmstripWidget
 from brush_watermark.ui.sidebar import SIDEBAR_WIDTH, SidebarPanel
 from brush_watermark.ui.styles import app_stylesheet
 from brush_watermark.ui.update_checker import UpdateChecker
@@ -38,9 +49,14 @@ def pil_to_qpixmap(image: Image.Image) -> QPixmap:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, image_path: Path, settings: Settings):
+    def __init__(self, image_paths: list[Path], settings: Settings):
         super().__init__()
-        self.doc = Document(image_path, settings)
+        # Each open image gets its own Settings copy so switching between images
+        # (via the filmstrip) doesn't leak in-progress edits from one to another.
+        self.docs: list[Document] = [
+            Document(path, dataclasses.replace(settings)) for path in image_paths
+        ]
+        self.active_index = 0
         self.swatch_colors = build_swatch_palette(self.doc.original)
         self.last_pointer: Optional[tuple[float, float]] = None
 
@@ -84,9 +100,31 @@ class MainWindow(QMainWindow):
         self._build_menu_bar()
         self._build_ui()
         self._connect_signals()
+        self.sidebar.set_multi_document_mode(len(self.docs) > 1)
+        self.filmstrip.set_thumbnails(self._build_filmstrip_thumbnails())
+        self.filmstrip.set_active_index(self.active_index)
         self.update_labels()
         self.schedule_preview(1)
         QTimer.singleShot(0, self._start_update_check)
+
+    @property
+    def doc(self) -> Document:
+        return self.docs[self.active_index]
+
+    def _build_filmstrip_thumbnails(self) -> list[QPixmap]:
+        pixmaps = []
+        for doc in self.docs:
+            pixmap = pil_to_qpixmap(doc.original).scaled(
+                THUMB_SIZE,
+                THUMB_SIZE,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            pixmaps.append(pixmap)
+        return pixmaps
+
+    def _update_filmstrip_dirty_flags(self) -> None:
+        self.filmstrip.set_dirty_flags([doc.dirty for doc in self.docs])
 
     def _build_menu_bar(self):
         file_menu = self.menuBar().addMenu("&File")
@@ -98,6 +136,11 @@ class MainWindow(QMainWindow):
         save_copy_action = QAction("Save Copy && Close", self)
         save_copy_action.triggered.connect(lambda _checked=False: self.save_copy_and_close())
         file_menu.addAction(save_copy_action)
+
+        self.save_all_action = QAction("Save All && Close", self)
+        self.save_all_action.setVisible(len(self.docs) > 1)
+        self.save_all_action.triggered.connect(lambda _checked=False: self.save_all_and_close())
+        file_menu.addAction(self.save_all_action)
 
         file_menu.addSeparator()
 
@@ -152,7 +195,17 @@ class MainWindow(QMainWindow):
         self.canvas_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.canvas_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.canvas_scroll.setWidget(self.canvas)
-        root.addWidget(self.canvas_scroll, 1)
+
+        self.filmstrip = FilmstripWidget()
+        self.filmstrip.setVisible(len(self.docs) > 1)
+
+        canvas_container = QWidget()
+        canvas_container_layout = QVBoxLayout(canvas_container)
+        canvas_container_layout.setContentsMargins(0, 0, 0, 0)
+        canvas_container_layout.setSpacing(0)
+        canvas_container_layout.addWidget(self.canvas_scroll, 1)
+        canvas_container_layout.addWidget(self.filmstrip)
+        root.addWidget(canvas_container, 1)
 
         self.sidebar_scroll = QScrollArea()
         self.sidebar_scroll.setWidgetResizable(True)
@@ -173,7 +226,9 @@ class MainWindow(QMainWindow):
         self.sidebar.delete_all.connect(self.clear_all)
         self.sidebar.save_and_close.connect(self.save_and_close)
         self.sidebar.save_copy_and_close.connect(self.save_copy_and_close)
+        self.sidebar.save_all_and_close.connect(self.save_all_and_close)
         self.sidebar.exit_without_saving.connect(self.exit_without_saving)
+        self.filmstrip.imageSelected.connect(self.switch_active_document)
         self.sidebar.preview_mode_changed.connect(self.on_preview_mode_changed)
         self.sidebar.update_now.connect(self.start_auto_update)
         self.sidebar.tool_changed.connect(self.set_active_tool)
@@ -456,6 +511,47 @@ class MainWindow(QMainWindow):
         if refresh_preview:
             self.schedule_preview()
 
+    def switch_active_document(self, index: int) -> None:
+        """Switch the displayed image (filmstrip click). Keeps every doc's edits in memory."""
+        if index == self.active_index or not (0 <= index < len(self.docs)):
+            return
+        self._sync_document_settings_from_sidebar()
+        if not self._layer_selected():
+            self._sync_tool_defaults_from_sidebar()
+        save_settings(self.doc.settings.to_dict())
+
+        self.active_index = index
+        doc = self.doc
+
+        self.setWindowTitle(f"{APP_NAME} - {doc.image_path.name}")
+        self.swatch_colors = build_swatch_palette(doc.original)
+        self.sidebar.set_image_context(self.swatch_colors, doc.metadata, doc.settings.text_color)
+
+        self.snap_endpoint = None
+        self.line_start_xy = None
+        self._line_stopped = False
+        self.selected_anchor_index = -1
+        self.anchor_drag_active = False
+        self.suppress_guides = False
+        self.left_press_img_xy = None
+        self.left_press_candidate = -1
+        self.left_press_on_selected = False
+        self.is_painting = False
+        self.is_erasing = False
+        self.last_img_xy = None
+        self.last_pointer = None
+
+        self.refresh_stroke_list()
+        if self._layer_selected():
+            self.sidebar.load_stroke_controls(doc.strokes[doc.selected_stroke_index])
+        else:
+            self.sidebar.load_tool_defaults(doc.settings)
+
+        self.filmstrip.set_active_index(index)
+        self.update_labels()
+        self.canvas.update()
+        self.schedule_preview(1)
+
     def canvas_to_image_xy(self, canvas_x: float, canvas_y: float):
         return self.doc.canvas_to_image_xy(canvas_x, canvas_y, self.scale, self.offset_x, self.offset_y)
 
@@ -474,6 +570,7 @@ class MainWindow(QMainWindow):
     def schedule_preview(self, delay_ms: int = 50):
         self.update_labels()
         save_settings(self.doc.settings.to_dict())
+        self._update_filmstrip_dirty_flags()
         if self.refresh_pending:
             return
         self.refresh_pending = True
@@ -868,44 +965,91 @@ class MainWindow(QMainWindow):
             self._sync_tool_defaults_from_sidebar()
         save_settings(self.doc.settings.to_dict())
 
-    def _confirm_save_without_strokes(self) -> bool:
-        if self.doc.strokes:
+    def _confirm_save_without_strokes(self, doc: Document) -> bool:
+        if doc.strokes:
             return True
         answer = QMessageBox.question(
             self,
             APP_NAME,
-            "You did not paint any stroke. Save unchanged image and close?",
+            f"{doc.image_path.name}: you did not paint any stroke. Save unchanged image and close?",
         )
         return answer == QMessageBox.StandardButton.Yes
 
-    def _write_final_image(self, export_path: Path) -> bool:
+    def _write_final_image(self, doc: Document, export_path: Path) -> bool:
         try:
-            final = self.doc.make_full_composited_image()
+            final = doc.make_full_composited_image()
             save_kwargs = {"quality": 95, "subsampling": 0, "optimize": True}
-            if self.doc.exif_bytes:
-                save_kwargs["exif"] = self.doc.exif_bytes
+            if doc.exif_bytes:
+                save_kwargs["exif"] = doc.exif_bytes
             final.save(export_path, **save_kwargs)
         except OSError as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
             return False
+        doc.dirty = False
         if self.sidebar.reveal_in_explorer_check.isChecked():
             reveal_in_explorer(export_path)
         return True
 
-    def save_and_close(self):
-        self._sync_before_save()
-        if not self._confirm_save_without_strokes():
-            return
-        if self._write_final_image(self.doc.image_path):
+    def _remove_document(self, index: int) -> None:
+        """Drop a saved image from the session; close the window once none remain."""
+        del self.docs[index]
+        if not self.docs:
             self.close()
+            return
+
+        self.active_index = min(index, len(self.docs) - 1)
+        multi = len(self.docs) > 1
+        self.filmstrip.set_thumbnails(self._build_filmstrip_thumbnails())
+        self.filmstrip.setVisible(multi)
+        self.filmstrip.set_active_index(self.active_index)
+        self.sidebar.set_multi_document_mode(multi)
+        self.save_all_action.setVisible(multi)
+
+        doc = self.doc
+        self.setWindowTitle(f"{APP_NAME} - {doc.image_path.name}")
+        self.swatch_colors = build_swatch_palette(doc.original)
+        self.sidebar.set_image_context(self.swatch_colors, doc.metadata, doc.settings.text_color)
+        self.selected_anchor_index = -1
+        self.anchor_drag_active = False
+        self.refresh_stroke_list()
+        if self._layer_selected():
+            self.sidebar.load_stroke_controls(doc.strokes[doc.selected_stroke_index])
+        else:
+            self.sidebar.load_tool_defaults(doc.settings)
+        self.update_labels()
+        self.schedule_preview(1)
+
+    def save_and_close(self):
+        doc = self.doc
+        self._sync_before_save()
+        if not self._confirm_save_without_strokes(doc):
+            return
+        if self._write_final_image(doc, doc.image_path):
+            self._remove_document(self.active_index)
 
     def save_copy_and_close(self):
+        doc = self.doc
         self._sync_before_save()
-        if not self._confirm_save_without_strokes():
+        if not self._confirm_save_without_strokes(doc):
             return
-        export_path = build_watermarked_copy_path(self.doc.image_path)
-        if self._write_final_image(export_path):
-            self.close()
+        export_path = build_watermarked_copy_path(doc.image_path)
+        if self._write_final_image(doc, export_path):
+            self._remove_document(self.active_index)
+
+    def save_all_and_close(self):
+        self._sync_before_save()
+        if any(not doc.strokes for doc in self.docs):
+            answer = QMessageBox.question(
+                self,
+                APP_NAME,
+                "One or more images have no painted strokes. Save all unchanged and close?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        for doc in self.docs:
+            if not self._write_final_image(doc, doc.image_path):
+                return
+        self.close()
 
     def exit_without_saving(self):
         self._sync_document_settings_from_sidebar()

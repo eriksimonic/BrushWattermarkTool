@@ -5,6 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **Keep this file and `README.md` in sync with the implementation.** When a change adds, removes, or moves a feature, command, or architectural piece, update both files in the same change — don't let them drift.
 >
 > When dispatching agents for codebase exploration/discovery (reading files to verify docs, locating code, answering "where is X" questions), prefer the Haiku model unless the task needs deeper reasoning.
+>
+> Sample JPGs for manual multi-image testing (e.g. the filmstrip feature) live at `C:\Users\erik\Desktop\ExportedImages\FB`.
 
 ## What this is
 

@@ -44,6 +44,7 @@ class Document:
         self.strokes: list[Stroke] = []
         self.selected_stroke_index = -1
         self.stroke_counter = 1
+        self.dirty = False
 
         self.erase_mask = Image.new("L", (self.full_w, self.full_h), 0)
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
@@ -314,6 +315,7 @@ class Document:
         )
         self.stroke_counter += 1
         self.strokes.append(stroke)
+        self.dirty = True
         return stroke
 
     def finalize_stroke_points(self, raw_points: list[Point], brush_size: int) -> list[Point]:
@@ -333,6 +335,7 @@ class Document:
                 deduped.append(pt)
         stroke.anchors = deduped
         self._rebuild_curve(stroke)
+        self.dirty = True
 
     def move_anchor(self, stroke_index: int, anchor_index: int, xy: Point) -> None:
         if 0 <= stroke_index < len(self.strokes):
@@ -340,6 +343,7 @@ class Document:
             if 0 <= anchor_index < len(stroke.anchors):
                 stroke.anchors[anchor_index] = xy
                 self._rebuild_curve(stroke)
+                self.dirty = True
 
     def insert_anchor(self, stroke_index: int, segment_index: int, xy: Point) -> None:
         if 0 <= stroke_index < len(self.strokes):
@@ -347,6 +351,7 @@ class Document:
             if 0 <= segment_index < len(stroke.anchors) - 1:
                 stroke.anchors.insert(segment_index + 1, xy)
                 self._rebuild_curve(stroke)
+                self.dirty = True
 
     def delete_anchor(self, stroke_index: int, anchor_index: int) -> None:
         if 0 <= stroke_index < len(self.strokes):
@@ -354,6 +359,7 @@ class Document:
             if len(stroke.anchors) > 2 and 0 <= anchor_index < len(stroke.anchors):
                 del stroke.anchors[anchor_index]
                 self._rebuild_curve(stroke)
+                self.dirty = True
 
     def select_stroke(self, index: int) -> None:
         if index < 0 or index >= len(self.strokes):
@@ -382,6 +388,7 @@ class Document:
             stroke.mask_softness = mask_softness
             stroke.repeat_text = repeat_text
             stroke.repeat_spacing = repeat_spacing
+            self.dirty = True
 
     def delete_selected_stroke(self) -> None:
         if 0 <= self.selected_stroke_index < len(self.strokes):
@@ -390,8 +397,10 @@ class Document:
                 self.selected_stroke_index = min(self.selected_stroke_index, len(self.strokes) - 1)
             else:
                 self.selected_stroke_index = -1
+            self.dirty = True
 
     def clear_all(self) -> None:
+        had_strokes = bool(self.strokes) or bool(self.erase_mask.getbbox())
         self.strokes = []
         self.current_points = []
         self.selected_stroke_index = -1
@@ -399,12 +408,15 @@ class Document:
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
         self._erase_version += 1
         self._layer_cache = {}
+        if had_strokes:
+            self.dirty = True
 
     def add_erase_to_mask(self, img_x: int, img_y: int) -> None:
         size = self.settings.brush_size
         r = size // 2
         self._erase_draw.ellipse((img_x - r, img_y - r, img_x + r, img_y + r), fill=255)
         self._erase_version += 1
+        self.dirty = True
 
     def add_erase_line_to_mask(self, x0: int, y0: int, x1: int, y1: int) -> None:
         size = self.settings.brush_size

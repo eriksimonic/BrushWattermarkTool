@@ -37,6 +37,7 @@ class SidebarPanel(QWidget):
     delete_all = Signal()
     save_and_close = Signal()
     save_copy_and_close = Signal()
+    save_all_and_close = Signal()
     exit_without_saving = Signal()
     preview_mode_changed = Signal()
     update_now = Signal()
@@ -245,10 +246,14 @@ class SidebarPanel(QWidget):
         self.ok_button.setIcon(get_icon("save", 14, ON_ACCENT))
         self.save_copy_button = QPushButton("Save copy and close")
         self.save_copy_button.setIcon(get_icon("copy", 14, TEXT))
+        self.save_all_button = QPushButton("Save all and close")
+        self.save_all_button.setIcon(get_icon("save", 14, TEXT))
+        self.save_all_button.setVisible(False)
         self.exit_button = QPushButton("Exit without saving")
         self.exit_button.setIcon(get_icon("x", 14, TEXT))
         actions.addWidget(self.ok_button)
         actions.addWidget(self.save_copy_button)
+        actions.addWidget(self.save_all_button)
         actions.addWidget(self.exit_button)
         layout.addLayout(actions)
 
@@ -342,6 +347,7 @@ class SidebarPanel(QWidget):
         self.delete_all_btn.clicked.connect(self.delete_all.emit)
         self.ok_button.clicked.connect(self.save_and_close.emit)
         self.save_copy_button.clicked.connect(self.save_copy_and_close.emit)
+        self.save_all_button.clicked.connect(self.save_all_and_close.emit)
         self.exit_button.clicked.connect(self.exit_without_saving.emit)
         self.show_original_check.toggled.connect(lambda *_: self.preview_mode_changed.emit())
         self.update_now_button.clicked.connect(self.update_now.emit)
@@ -350,6 +356,18 @@ class SidebarPanel(QWidget):
 
     def show_original_preview(self) -> bool:
         return bool(self.show_original_check.isChecked())
+
+    def set_image_context(
+        self, swatch_colors: list[str], image_metadata: ImageMetadata, current_text_color: str
+    ) -> None:
+        """Refresh per-image display state (serial, color swatches) when the active image changes."""
+        self._swatch_colors = swatch_colors
+        serial_text = image_metadata.serial or "Not found in EXIF"
+        self.serial_label.setText(f"Serial: {serial_text}")
+        self.color_picker.set_swatches(swatch_colors, current_text_color)
+
+    def set_multi_document_mode(self, enabled: bool) -> None:
+        self.save_all_button.setVisible(enabled)
 
     def _update_repeat_spacing_enabled(self):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())

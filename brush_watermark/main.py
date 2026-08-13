@@ -48,10 +48,19 @@ def load_app_icon() -> QIcon:
     return QIcon(square)
 
 
-def resolve_image_path() -> Optional[Path]:
+def resolve_image_paths() -> list[Path]:
+    """Resolve the image(s) to open.
+
+    Lightroom's "Edit In" external editor passes every selected photo as a
+    separate command-line argument, so all of argv[1:] are collected here
+    (filtered to supported extensions) rather than just argv[1].
+    """
     if len(sys.argv) >= 2:
-        return Path(sys.argv[1])
-    return select_jpg_file()
+        return [
+            Path(arg) for arg in sys.argv[1:] if Path(arg).suffix.lower() in SUPPORTED_EXTENSIONS
+        ]
+    selected = select_jpg_file()
+    return [selected] if selected else []
 
 
 def main() -> int:
@@ -61,14 +70,14 @@ def main() -> int:
     app.setApplicationDisplayName(APP_NAME)
     app.setWindowIcon(load_app_icon())
 
-    image_path = resolve_image_path()
-    if image_path is None:
+    image_paths = resolve_image_paths()
+    if not image_paths:
         return 0
     try:
         from brush_watermark.ui.main_window import MainWindow
 
         settings = Settings.from_dict(load_settings())
-        window = MainWindow(image_path, settings)
+        window = MainWindow(image_paths, settings)
         window.show()
         return app.exec()
     except (FileNotFoundError, ValueError, OSError) as exc:

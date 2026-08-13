@@ -142,3 +142,47 @@ class TestFinalizeStrokePoints:
         doc = _make_doc(tmp_path)
         pts = [(0, 0), (500, 0)]
         assert len(doc.finalize_stroke_points(pts, 100)) >= 2
+
+
+class TestDirtyFlag:
+    def test_starts_clean(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        assert doc.dirty is False
+
+    def test_add_stroke_marks_dirty(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.add_stroke([(0, 0), (10, 0)], 50, 50, "normal", "#ffffff", 0, 1, False, 5)
+        assert doc.dirty is True
+
+    def test_move_anchor_marks_dirty(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.strokes.append(_stroke([(0, 0), (50, 0), (100, 0)]))
+        assert doc.dirty is False
+        doc.move_anchor(0, 1, (50, 25))
+        assert doc.dirty is True
+
+    def test_move_anchor_out_of_range_does_not_mark_dirty(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.strokes.append(_stroke([(0, 0), (10, 0)]))
+        doc.move_anchor(0, 99, (5, 5))
+        assert doc.dirty is False
+
+    def test_erase_marks_dirty(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.add_erase_to_mask(5, 5)
+        assert doc.dirty is True
+
+    def test_delete_selected_stroke_marks_dirty(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.strokes.append(_stroke([(0, 0), (10, 0)]))
+        doc.selected_stroke_index = 0
+        doc.delete_selected_stroke()
+        assert doc.dirty is True
+
+    def test_clear_all_marks_dirty_only_if_there_was_something(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.clear_all()
+        assert doc.dirty is False
+        doc.strokes.append(_stroke([(0, 0), (10, 0)]))
+        doc.clear_all()
+        assert doc.dirty is True
