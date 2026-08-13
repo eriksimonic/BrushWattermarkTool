@@ -73,11 +73,28 @@ def main() -> int:
     image_paths = resolve_image_paths()
     if not image_paths:
         return 0
+
+    launch_server = None
+    if len(sys.argv) >= 2:
+        # CLI-arg launches are how Explorer's context menu opens images. Explorer
+        # invokes the app once per selected file rather than once with every
+        # path (MultiSelectModel=Player doesn't help here — see launch_collector),
+        # so merge sibling launches into one window instead of opening several.
+        from brush_watermark.ui.launch_collector import claim_primary_or_forward
+
+        forwarded, launch_server = claim_primary_or_forward(image_paths)
+        if forwarded:
+            return 0
+
     try:
         from brush_watermark.ui.main_window import MainWindow
 
         settings = Settings.from_dict(load_settings())
         window = MainWindow(image_paths, settings)
+        if launch_server is not None:
+            from brush_watermark.ui.launch_collector import start_collecting
+
+            start_collecting(launch_server, window.add_documents)
         window.show()
         return app.exec()
     except (FileNotFoundError, ValueError, OSError) as exc:

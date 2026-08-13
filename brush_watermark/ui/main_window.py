@@ -991,6 +991,31 @@ class MainWindow(QMainWindow):
             reveal_in_explorer(export_path)
         return True
 
+    def add_documents(self, paths: list[Path]) -> None:
+        """Append images handed over by a sibling launch (see launch_collector).
+
+        Runs on the Qt event loop, same thread as everything else here, so
+        no locking is needed.
+        """
+        existing = {doc.image_path.resolve() for doc in self.docs}
+        new_paths = sorted(
+            (path for path in paths if path.resolve() not in existing),
+            key=lambda path: path.name,
+        )
+        if not new_paths:
+            return
+
+        template_settings = self.doc.settings
+        for path in new_paths:
+            self.docs.append(Document(path, dataclasses.replace(template_settings)))
+
+        multi = len(self.docs) > 1
+        self.filmstrip.set_thumbnails(self._build_filmstrip_thumbnails())
+        self.filmstrip.setVisible(multi)
+        self.filmstrip.set_active_index(self.active_index)
+        self.sidebar.set_multi_document_mode(multi)
+        self.save_all_action.setVisible(multi)
+
     def _remove_document(self, index: int) -> None:
         """Drop a saved image from the session; close the window once none remain."""
         del self.docs[index]
