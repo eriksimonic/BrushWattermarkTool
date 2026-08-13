@@ -52,6 +52,12 @@ def install_context_menu() -> None:
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, MENU_TEXT)
             winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, icon)
+            # "Player" tells Explorer to invoke the command once with every
+            # selected file appended as extra arguments, instead of once per
+            # file. Without it, multi-selecting JPGs and choosing this menu
+            # item would open a separate window per photo instead of one
+            # window with all of them loaded into the filmstrip.
+            winreg.SetValueEx(key, "MultiSelectModel", 0, winreg.REG_SZ, "Player")
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path + r"\command") as command_key:
             winreg.SetValueEx(command_key, "", 0, winreg.REG_SZ, command)
 

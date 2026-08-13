@@ -29,6 +29,7 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 - **Auto update check** — compares your version to the latest release on GitHub
 - **One-click update** — packaged Windows builds can download and install the latest release automatically
 - **Cross-platform** — Windows, macOS, and Linux builds plus run-from-source support
+- **Multi-image editing** — open several JPGs at once (multiple CLI args, or Lightroom's "Edit In" with multiple selected photos) and switch between them with a filmstrip; each image keeps its own edits in memory until saved
 
 ## Requirements
 
@@ -98,7 +99,7 @@ chmod +x BrushWatermark/BrushWatermark   # if needed
 ### Menu bar
 
 - **File** — Save & Close, Save Copy & Close, Exit Without Saving
-- **Tools** — Install or remove the Windows Explorer right-click shortcut for JPG/JPEG files
+- **Tools** — Install or remove the Windows Explorer right-click shortcut for JPG/JPEG files; multi-selecting files and choosing it opens them all in one window with a filmstrip to switch between them
 - **Help** — About (version and usage)
 
 ### Sidebar

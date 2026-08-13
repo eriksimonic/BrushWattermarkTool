@@ -327,7 +327,8 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             APP_NAME,
-            f'Explorer will now show "{MENU_TEXT}" when you right-click JPG and JPEG files.',
+            f'Explorer will now show "{MENU_TEXT}" when you right-click JPG and JPEG files. '
+            "Selecting multiple files opens them together for editing.",
         )
 
     def uninstall_explorer_context_menu(self):
