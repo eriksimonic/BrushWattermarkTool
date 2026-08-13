@@ -21,11 +21,21 @@ class TestResolveImagePaths:
 
     def test_no_args_falls_back_to_file_picker(self, monkeypatch):
         monkeypatch.setattr("sys.argv", ["brush_watermark"])
-        with patch("brush_watermark.main.select_jpg_file", return_value=Path("picked.jpg")) as picker:
+        with patch(
+            "brush_watermark.main.select_jpg_files", return_value=[Path("picked.jpg")]
+        ) as picker:
             assert resolve_image_paths() == [Path("picked.jpg")]
             picker.assert_called_once()
 
+    def test_no_args_and_picker_allows_multiple_files(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["brush_watermark"])
+        with patch(
+            "brush_watermark.main.select_jpg_files",
+            return_value=[Path("a.jpg"), Path("b.jpeg")],
+        ):
+            assert resolve_image_paths() == [Path("a.jpg"), Path("b.jpeg")]
+
     def test_no_args_and_picker_cancelled_returns_empty(self, monkeypatch):
         monkeypatch.setattr("sys.argv", ["brush_watermark"])
-        with patch("brush_watermark.main.select_jpg_file", return_value=None):
+        with patch("brush_watermark.main.select_jpg_files", return_value=[]):
             assert resolve_image_paths() == []

@@ -46,7 +46,7 @@ python -m brush_watermark path/to/image.jpg
 
 (`python brush_watermark.py path/to/image.jpg` also works — it is a thin wrapper around the same entry point.)
 
-If you omit the file path, a file picker opens.
+If you omit the file path, a file picker opens — you can select multiple JPGs at once to load them into the filmstrip.
 
 ## Run the executable
 

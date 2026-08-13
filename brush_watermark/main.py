@@ -17,21 +17,22 @@ from brush_watermark.config import (
 from brush_watermark.models import Settings
 
 
-def select_jpg_file() -> Optional[Path]:
-    file_path, _ = QFileDialog.getOpenFileName(
+def select_jpg_files() -> list[Path]:
+    file_paths, _ = QFileDialog.getOpenFileNames(
         None,
-        "Select JPG image",
+        "Select JPG image(s)",
         last_image_dir(),
         "JPEG images (*.jpg *.jpeg);;All files (*.*)",
     )
-    if not file_path:
-        return None
-    path = Path(file_path)
-    if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+    if not file_paths:
+        return []
+    paths = [Path(file_path) for file_path in file_paths]
+    invalid = [path for path in paths if path.suffix.lower() not in SUPPORTED_EXTENSIONS]
+    if invalid:
         QMessageBox.critical(None, APP_NAME, "Only JPG and JPEG files are supported.")
-        return None
-    save_settings({"last_image_dir": str(path.parent)})
-    return path
+        return []
+    save_settings({"last_image_dir": str(paths[0].parent)})
+    return paths
 
 
 def load_app_icon() -> QIcon:
@@ -59,8 +60,7 @@ def resolve_image_paths() -> list[Path]:
         return [
             Path(arg) for arg in sys.argv[1:] if Path(arg).suffix.lower() in SUPPORTED_EXTENSIONS
         ]
-    selected = select_jpg_file()
-    return [selected] if selected else []
+    return select_jpg_files()
 
 
 def main() -> int:
