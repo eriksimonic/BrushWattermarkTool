@@ -15,7 +15,7 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 - **Editing tools** — Pointer (select), Brush (draw strokes), Path (edit anchors), and Eraser (remove watermark pixels), plus Pan and Zoom for moving around the photo
 - **Zoom and pan** — Fit, 1:1, zoom −/+ or a typed zoom % (10–400 %); the Zoom tool zooms around the clicked point, and holding Space pans in any tool
 - **Brush strokes** — freehand drag or click-to-place straight segments; snap to stroke endpoints to resume a line; right-click stops drawing
-- **Path editing** — drag anchors on the selected stroke, double-click a segment to add an anchor, Delete to remove one (with no anchor selected, Delete removes the selected layer)
+- **Path editing** — drag anchors on the selected stroke (the watermark follows live; very long strokes preview at reduced resolution while dragging and sharpen on release), double-click a segment to add an anchor, Delete to remove one (with no anchor selected, Delete removes the selected layer)
 - **Per-layer control** — each stroke has its own color, blend mode, strength, brush size, softness, and repeat settings
 - **Repeat text** — optionally tile watermark text along long strokes, with adjustable gap
 - **Auto strength** — optionally compute each new stroke's strength from the pixels underneath it, so flat areas get a fainter mark and busy/textured areas can hide a stronger one

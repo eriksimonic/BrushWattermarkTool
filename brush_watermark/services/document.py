@@ -1,4 +1,6 @@
 import dataclasses
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +24,34 @@ from brush_watermark.rendering.blend import blend_mode_label, composite_watermar
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, render_stroke_layer
 from brush_watermark.services.exif_metadata import read_exif_bytes, read_image_metadata
+
+
+# Render caches keep entries for this many display sizes: the full preview and
+# the low-res one shown while dragging.
+_CACHED_SIZES = 2
+
+
+def _keep_recent(cache: dict, key, value) -> dict:
+    """Return cache with key set to value as the newest entry, oldest dropped."""
+    updated = {k: v for k, v in cache.items() if k != key}
+    updated[key] = value
+    while len(updated) > _CACHED_SIZES:
+        del updated[next(iter(updated))]
+    return updated
+
+
+@dataclasses.dataclass(frozen=True)
+class PreviewRequest:
+    """Immutable snapshot of what one preview render needs (see Document.preview_request)."""
+
+    display_w: int
+    display_h: int
+    scale_factor: float
+    strokes: tuple[Stroke, ...]
+    settings: Settings
+    erase_mask: Optional[Image.Image]  # full-resolution copy; None when nothing is erased
+    erase_version: int
+    original: bool = False
 
 
 class Document:
@@ -52,11 +82,19 @@ class Document:
         self.current_points: list[Point] = []
         self.current_brush_size = settings.brush_size
 
-        # Preview render caches: rendered per-stroke layers (cropped to their
-        # bounding box) keyed by a content signature, plus the resized base image.
-        self._layer_cache: dict[tuple, tuple] = {}
-        self._base_preview: Optional[Image.Image] = None
-        self._base_preview_size: Optional[tuple[int, int]] = None
+        # Preview render caches, per display size: rendered per-stroke layers
+        # (cropped to their bounding box) keyed by a content signature, plus the
+        # resized base image. Only render_preview touches them, under the lock,
+        # so a worker thread can render while the GUI thread edits.
+        self._render_lock = threading.Lock()
+        self._layer_caches: dict[tuple[int, int], dict[tuple, tuple]] = {}
+        self._base_previews: dict[tuple[int, int], Image.Image] = {}
+        self._erase_preview: Optional[Image.Image] = None
+        self._erase_preview_key: Optional[tuple[int, int, int]] = None
+        self._empty_erase_mask = Image.new("L", (1, 1), 0)
+        # Copy of erase_mask handed to preview requests, refreshed when it changes.
+        self._erase_snapshot: Optional[Image.Image] = None
+        self._erase_snapshot_version = -1
 
     def visible_strokes(self) -> list[Stroke]:
         return [s for s in self.strokes if s.visible]
@@ -149,14 +187,18 @@ class Document:
         return self._maybe_append_metadata_footer(result)
 
     def _preview_base_image(self, display_w: int, display_h: int) -> Image.Image:
-        """LANCZOS-resized copy of the original, cached by display size."""
+        """LANCZOS-resized copy of the original, cached for the last few display sizes."""
         size = (display_w, display_h)
-        if self._base_preview is None or self._base_preview_size != size:
-            self._base_preview = self.original.resize(size, Image.Resampling.LANCZOS).convert("RGBA")
-            self._base_preview_size = size
-        return self._base_preview.copy()
+        base = self._base_previews.get(size)
+        if base is None:
+            base = self.original.resize(size, Image.Resampling.LANCZOS).convert("RGBA")
+        self._base_previews = _keep_recent(self._base_previews, size, base)
+        return base.copy()
 
-    def _stroke_layer_signature(self, stroke: Stroke, display_w: int, display_h: int) -> tuple:
+    @staticmethod
+    def _stroke_layer_signature(
+        stroke: Stroke, settings: Settings, display_w: int, display_h: int, erase_version: int
+    ) -> tuple:
         """Everything that affects a stroke's rendered (pre-blend) layer."""
         return (
             tuple(stroke.points),
@@ -167,38 +209,42 @@ class Document:
             stroke.repeat_text,
             stroke.repeat_spacing,
             stroke.visible,
-            self.settings.watermark_text,
-            self.settings.font_name,
-            self.settings.auto_fit_text,
+            settings.watermark_text,
+            settings.font_name,
+            settings.auto_fit_text,
             display_w,
             display_h,
-            self._erase_version,
+            erase_version,
         )
 
     def _composite_preview(
         self,
         base_rgba: Image.Image,
-        strokes: list[Stroke],
-        scale_factor: float,
-        display_w: int,
-        display_h: int,
+        request: "PreviewRequest",
+        erase_mask: Image.Image,
     ) -> Image.Image:
         """Composite strokes onto base, reusing cached per-stroke layers.
 
         Unchanged strokes are not re-rendered; blending only touches each
         stroke's bounding box, so cost scales with edited/added strokes rather
-        than the total number of strokes.
+        than the total number of strokes. Layers are cached per display size
+        (the last few), so alternating a low-res drag preview with the full
+        one doesn't throw the other size's layers away.
         """
+        size = (request.display_w, request.display_h)
+        old_cache = self._layer_caches.get(size, {})
         result = base_rgba
         new_cache: dict[tuple, tuple] = {}
-        for stroke in strokes:
+        for stroke in request.strokes:
             if not stroke.visible:
                 continue
-            sig = self._stroke_layer_signature(stroke, display_w, display_h)
-            cached = self._layer_cache.get(sig)
+            sig = self._stroke_layer_signature(
+                stroke, request.settings, request.display_w, request.display_h, request.erase_version
+            )
+            cached = old_cache.get(sig)
             if cached is None:
                 cached = render_stroke_layer(
-                    display_w, display_h, stroke, self.settings, self.erase_mask, scale_factor
+                    request.display_w, request.display_h, stroke, request.settings, erase_mask, request.scale_factor
                 )
             new_cache[sig] = cached
             layer_crop, box = cached
@@ -210,31 +256,91 @@ class Document:
                 region,
                 layer_crop,
                 stroke.text_color,
-                normalize_blend_mode(stroke.blend_mode, self.settings.blend_mode),
+                normalize_blend_mode(stroke.blend_mode, request.settings.blend_mode),
                 strength,
             )
             result.paste(blended, box)
-        self._layer_cache = new_cache
+        self._layer_caches = _keep_recent(self._layer_caches, size, new_cache)
         return result
 
+    def _preview_erase_mask(self, request: "PreviewRequest") -> Image.Image:
+        """The erase mask at display size, resized once per erase version and size.
+
+        Rendering resizes the erase mask to the layer size when scaling; handing
+        it an already-resized mask makes that a plain copy, with identical output.
+        """
+        if request.erase_mask is None:
+            return self._empty_erase_mask
+        if abs(request.scale_factor - 1.0) < 0.0001:
+            return request.erase_mask
+        key = (request.erase_version, request.display_w, request.display_h)
+        if self._erase_preview_key != key:
+            self._erase_preview = request.erase_mask.resize(
+                (request.display_w, request.display_h), Image.Resampling.BILINEAR
+            )
+            self._erase_preview_key = key
+        return self._erase_preview
+
+    def preview_request(
+        self, display_w: int, display_h: int, scale_factor: float, *, original: bool = False
+    ) -> "PreviewRequest":
+        """Snapshot everything a preview render needs (GUI thread).
+
+        The request owns copies of the strokes, settings and erase mask, so
+        `render_preview` can run on a worker thread while the document keeps
+        being edited.
+        """
+        if self._erase_snapshot_version != self._erase_version:
+            self._erase_snapshot = self.erase_mask.copy() if self.erase_mask.getbbox() else None
+            self._erase_snapshot_version = self._erase_version
+        strokes = tuple(
+            dataclasses.replace(s, points=list(s.points), anchors=list(s.anchors))
+            for s in self.scaled_strokes(scale_factor)
+        )
+        return PreviewRequest(
+            display_w=max(1, int(display_w)),
+            display_h=max(1, int(display_h)),
+            scale_factor=scale_factor,
+            strokes=strokes,
+            settings=dataclasses.replace(self.settings),
+            erase_mask=self._erase_snapshot,
+            erase_version=self._erase_version,
+            original=original,
+        )
+
+    def render_preview(self, request: "PreviewRequest") -> Image.Image:
+        """Render a preview from a snapshot; safe to call from a worker thread.
+
+        Only the render caches are touched (under a lock), never the live
+        strokes or erase mask.
+        """
+        return self.render_preview_timed(request)[0]
+
+    def render_preview_timed(self, request: "PreviewRequest") -> tuple[Image.Image, float]:
+        """render_preview, plus how long the strokes took in ms.
+
+        The timing leaves out the one-off resize of the original for a new
+        display size, so it reflects what re-rendering after an edit costs.
+        """
+        with self._render_lock:
+            base = self._preview_base_image(request.display_w, request.display_h)
+            if request.original:
+                return base, 0.0
+            started = time.perf_counter()
+            preview = self._composite_preview(base, request, self._preview_erase_mask(request))
+            if request.settings.add_visible_metadata:
+                preview = append_metadata_footer(
+                    preview.convert("RGB"),
+                    self.metadata,
+                    request.settings.metadata_copy_text,
+                ).convert("RGBA")
+            return preview, (time.perf_counter() - started) * 1000
+
     def make_preview_image(self, display_w: int, display_h: int, scale_factor: float) -> Image.Image:
-        display_w = max(1, int(display_w))
-        display_h = max(1, int(display_h))
-        preview_strokes = self.scaled_strokes(scale_factor)
-        base = self._preview_base_image(display_w, display_h)
-        preview = self._composite_preview(base, preview_strokes, scale_factor, display_w, display_h)
-        if self.settings.add_visible_metadata:
-            preview = append_metadata_footer(
-                preview.convert("RGB"),
-                self.metadata,
-                self.settings.metadata_copy_text,
-            ).convert("RGBA")
-        return preview
+        return self.render_preview(self.preview_request(display_w, display_h, scale_factor))
 
     def make_original_preview_image(self, display_w: int, display_h: int) -> Image.Image:
-        display_w = max(1, int(display_w))
-        display_h = max(1, int(display_h))
-        return self.original.resize((display_w, display_h), Image.Resampling.LANCZOS).convert("RGBA")
+        return self.render_preview(self.preview_request(display_w, display_h, 1.0, original=True))
 
     def stroke_hit_distance(self, stroke: Stroke, img_x: int, img_y: int) -> Optional[float]:
         points = stroke.points
@@ -412,7 +518,7 @@ class Document:
         self.erase_mask = Image.new("L", (self.full_w, self.full_h), 0)
         self._erase_draw = ImageDraw.Draw(self.erase_mask)
         self._erase_version += 1
-        self._layer_cache = {}
+        self._layer_caches = {}
         if had_strokes:
             self.dirty = True
 

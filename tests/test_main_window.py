@@ -423,8 +423,12 @@ def test_add_images_appends_documents(make_window, tmp_path, monkeypatch):
     window.add_images_action.trigger()
     assert [doc.image_path.name for doc in window.docs] == ["img0.jpg", "extra.jpg"]
     assert not window.filmstrip.isHidden()
-    # The filmstrip appeared and shrank the canvas: the fit is redone for it.
-    QTest.qWait(30)
+    # The filmstrip appeared and shrank the canvas: the fit is redone for it
+    # (rendered on the preview worker, so wait for it to land).
+    for _ in range(400):
+        QTest.qWait(10)
+        if not window._preview_busy and not window.refresh_pending:
+            break
     viewport_h = window.canvas_scroll.viewport().height()
     assert window.offset_y == (viewport_h - window.canvas.preview_draw_size[1]) // 2
     window.filmstrip.add_tile.click()  # the same file again is ignored

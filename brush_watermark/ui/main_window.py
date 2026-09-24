@@ -46,12 +46,18 @@ from brush_watermark.ui.filmstrip import THUMB_H, THUMB_W, FilmstripWidget
 from brush_watermark.ui.icons import get_pixmap
 from brush_watermark.ui.inspector import INSPECTOR_WIDTH, InspectorPanel
 from brush_watermark.ui.layer_list import LayerItem
+from brush_watermark.ui.preview_worker import PreviewJob, PreviewWorker
 from brush_watermark.ui.status_footer import StatusFooter
 from brush_watermark.ui.styles import app_stylesheet
 from brush_watermark.ui.tool_rail import ToolRail
 from brush_watermark.ui.top_bar import TopBar
 from brush_watermark.ui.update_checker import UpdateChecker
 from brush_watermark.ui.zoom import clamp_zoom, step_zoom
+
+# While dragging, a stroke whose last full preview took longer than this (ms)
+# is previewed at LOW_RES_PREVIEW_FACTOR of the resolution until release.
+LOW_RES_PREVIEW_ABOVE_MS = 25.0
+LOW_RES_PREVIEW_FACTOR = 0.5
 
 # Widgets where Space is typed text, not "hold to pan".
 _TEXT_INPUT_TYPES = (QLineEdit, QAbstractSpinBox, QTextEdit, QPlainTextEdit)
@@ -111,6 +117,15 @@ class MainWindow(QMainWindow):
         self._auto_updater: AutoUpdater | None = None
         self._update_result: UpdateCheckResult | None = None
         self._auto_watermark_worker: AutoWatermarkWorker | None = None
+        self._preview_worker = PreviewWorker(self)
+        self._preview_worker.rendered.connect(self._on_preview_rendered)
+        self._preview_worker.failed.connect(self._on_preview_failed)
+        self._preview_worker.start()
+        self._preview_busy = False
+        self._preview_dirty = False
+        self._preview_generation = 0
+        self._applied_preview_generation = 0
+        self._last_full_render_ms = 0.0
 
         self.setWindowTitle(f"{APP_NAME} - {self.doc.image_path.name}")
         self.resize(1560, 980)
@@ -138,6 +153,7 @@ class MainWindow(QMainWindow):
         for worker in (self._auto_watermark_worker, self._update_checker, self._auto_updater):
             if worker is not None and worker.isRunning():
                 worker.wait(3000)
+        self._preview_worker.stop()
         QApplication.instance().removeEventFilter(self)
         super().closeEvent(event)
 
@@ -580,7 +596,7 @@ class MainWindow(QMainWindow):
             return
         self.zoom_is_fit = True
         self._pending_zoom_anchor = None
-        self.refresh_preview()
+        self.refresh_preview(sync=True)
 
     def set_zoom(self, scale: float, anchor: Optional[tuple[float, float]] = None) -> None:
         """Zoom to `scale`, keeping the image point under `anchor` (viewport
@@ -595,7 +611,7 @@ class MainWindow(QMainWindow):
         self.zoom_is_fit = False
         self.manual_scale = clamp_zoom(scale)
         self._pending_zoom_anchor = (img_x, img_y, ax, ay)
-        self.refresh_preview()
+        self.refresh_preview(sync=True)
 
     def zoom_step(self, direction: int, anchor: Optional[tuple[float, float]] = None) -> None:
         self.set_zoom(step_zoom(self.scale, direction), anchor)
@@ -774,16 +790,34 @@ class MainWindow(QMainWindow):
         self.refresh_pending = True
         QTimer.singleShot(delay_ms, self.refresh_preview)
 
-    def refresh_preview(self):
+    def _request_live_preview(self) -> None:
+        """Re-render as soon as possible during a drag, without schedule_preview's
+        settings save; renders coalesce behind the one in flight."""
+        if self.refresh_pending:
+            return
+        self.refresh_pending = True
+        QTimer.singleShot(0, self.refresh_preview)
+
+    def _interactive_edit(self) -> bool:
+        return self.anchor_drag_active or self.is_erasing
+
+    def refresh_preview(self, *, sync: bool = False):
+        """Re-render the preview on the worker thread, or inline when `sync`.
+
+        Zoom changes render inline so the new layout (scroll position, canvas
+        size) is in place immediately; everything else goes to the worker, and
+        edits made while it renders are folded into one follow-up render.
+        """
         self.refresh_pending = False
         self.update_labels()
+        if not sync and self._preview_busy:
+            self._preview_dirty = True
+            return
         viewport = self.canvas_scroll.viewport()
         canvas_w = max(1, viewport.width())
         canvas_h = max(1, viewport.height())
-        include_metadata = (
-            not self.top_bar.show_original()
-            and self.doc.settings.add_visible_metadata
-        )
+        show_original = self.top_bar.show_original()
+        include_metadata = not show_original and self.doc.settings.add_visible_metadata
         content_w, content_h = self.doc.preview_content_size(include_metadata=include_metadata)
         if self.zoom_is_fit:
             # Fit the image to the canvas, but never upscale past 1:1 (100%). A small
@@ -799,17 +833,66 @@ class MainWindow(QMainWindow):
         # Above 100 % the preview is rendered at 1:1 and the canvas scales it up
         # when drawing; rendering it at 400 % would cost far too much memory.
         render_scale = min(self.scale, 1.0)
-        render_w = max(1, int(self.doc.full_w * render_scale))
-        render_h = max(1, int(self.doc.full_h * render_scale))
-        if self.top_bar.show_original():
-            preview_image = self.doc.make_original_preview_image(render_w, render_h)
+        full_w = max(1, int(self.doc.full_w * render_scale))
+        full_h = max(1, int(self.doc.full_h * render_scale))
+        render_w, render_h = full_w, full_h
+        # Not with the metadata footer: it doesn't scale with the image (its text
+        # has a minimum size), so a low-res render would lay out taller and the
+        # photo would jump when the drag starts and ends.
+        low_res = (
+            not sync
+            and not show_original
+            and not include_metadata
+            and self._interactive_edit()
+            and self._last_full_render_ms > LOW_RES_PREVIEW_ABOVE_MS
+        )
+        if low_res:
+            # A slow stroke is being dragged: render at reduced resolution so the
+            # preview keeps up; the release renders it sharp again.
+            render_scale *= LOW_RES_PREVIEW_FACTOR
+            render_w = max(1, int(self.doc.full_w * render_scale))
+            render_h = max(1, int(self.doc.full_h * render_scale))
+        request = self.doc.preview_request(render_w, render_h, render_scale, original=show_original)
+        self._preview_generation += 1
+        # Multipliers from the rendered pixmap's size to its on-screen size.
+        zoom_ratio = self.scale / min(self.scale, 1.0)
+        ratio = (zoom_ratio * full_w / render_w, zoom_ratio * full_h / render_h)
+        job = PreviewJob(self._preview_generation, self.doc, request, layout=(ratio, low_res))
+        if sync:
+            self._apply_preview(job, pil_to_qpixmap(self.doc.render_preview(request)))
         else:
-            preview_image = self.doc.make_preview_image(render_w, render_h, render_scale)
-        pixmap_w, pixmap_h = preview_image.size
-        if self.scale > render_scale:
-            ratio = self.scale / render_scale
-            pixmap_w, pixmap_h = round(pixmap_w * ratio), round(pixmap_h * ratio)
+            self._preview_busy = True
+            self._preview_worker.submit(job)
 
+    def _on_preview_rendered(self, job: PreviewJob, qimage, render_ms: float) -> None:
+        self._preview_busy = False
+        _ratio, low_res = job.layout
+        if not low_res and not job.request.original:
+            self._last_full_render_ms = render_ms
+        self._apply_preview(job, QPixmap.fromImage(qimage))
+        if self._preview_dirty:
+            self._preview_dirty = False
+            self.refresh_preview()
+
+    def _on_preview_failed(self, message: str) -> None:
+        self._preview_busy = False
+        print(f"Preview render failed: {message}", file=sys.stderr)
+
+    def _apply_preview(self, job: PreviewJob, pixmap: QPixmap) -> None:
+        """Show a rendered preview and lay the canvas out around it."""
+        # Skip results overtaken by a newer one (an inline zoom render can land
+        # before a worker render requested earlier) or made for another image.
+        if job.generation <= self._applied_preview_generation or job.doc is not self.doc:
+            return
+        self._applied_preview_generation = job.generation
+        (ratio_x, ratio_y), _low_res = job.layout
+        pixmap_w, pixmap_h = pixmap.width(), pixmap.height()
+        if (ratio_x, ratio_y) != (1.0, 1.0):
+            pixmap_w, pixmap_h = round(pixmap_w * ratio_x), round(pixmap_h * ratio_y)
+
+        viewport = self.canvas_scroll.viewport()
+        canvas_w = max(1, viewport.width())
+        canvas_h = max(1, viewport.height())
         if self.zoom_is_fit:
             self.canvas_scroll.setWidgetResizable(True)
             self.canvas_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -826,7 +909,7 @@ class MainWindow(QMainWindow):
 
         self.offset_x = (canvas_w - pixmap_w) // 2
         self.offset_y = (canvas_h - pixmap_h) // 2
-        self.preview_pixmap = pil_to_qpixmap(preview_image)
+        self.preview_pixmap = pixmap
         self.canvas.preview_pixmap = self.preview_pixmap
         self.canvas.preview_draw_size = (pixmap_w, pixmap_h)
         if self._pending_zoom_anchor is not None:
@@ -1146,6 +1229,7 @@ class MainWindow(QMainWindow):
         self.doc.move_anchor(self.doc.selected_stroke_index, self.selected_anchor_index, (img_x, img_y))
         self.last_img_xy = (img_x, img_y)
         self.canvas.update()
+        self._request_live_preview()
 
     def _path_release(self, canvas_x: float, canvas_y: float) -> None:
         if self.anchor_drag_active:
@@ -1186,7 +1270,7 @@ class MainWindow(QMainWindow):
             self.last_img_xy = (img_x, img_y)
         self.doc.add_erase_line_to_mask(self.last_img_xy[0], self.last_img_xy[1], img_x, img_y)
         self.last_img_xy = (img_x, img_y)
-        self.schedule_preview(20)
+        self._request_live_preview()
 
     def _erase_release(self, canvas_x: float, canvas_y: float) -> None:
         self.last_img_xy = None
