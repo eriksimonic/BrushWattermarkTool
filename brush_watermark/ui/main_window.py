@@ -9,11 +9,9 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QScrollArea,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -23,6 +21,7 @@ from brush_watermark.config import APP_NAME, reveal_in_explorer, save_settings
 from brush_watermark.geometry.curve import find_curve_segment_for_insert
 from brush_watermark.geometry.points import clamp, dist, find_anchor_index
 from brush_watermark.models import CanvasView, ToolMode
+from brush_watermark.rendering.blend import blend_mode_label
 from brush_watermark.rendering.colors import build_swatch_palette
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.adaptive_strength import opacity_for_path
@@ -35,9 +34,14 @@ from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
+from brush_watermark.ui.canvas_overlays import CanvasArea
 from brush_watermark.ui.filmstrip import THUMB_H, THUMB_W, FilmstripWidget
-from brush_watermark.ui.sidebar import SIDEBAR_WIDTH, SidebarPanel
+from brush_watermark.ui.inspector import INSPECTOR_WIDTH, InspectorPanel
+from brush_watermark.ui.layer_list import LayerItem
+from brush_watermark.ui.status_footer import StatusFooter
 from brush_watermark.ui.styles import app_stylesheet
+from brush_watermark.ui.tool_rail import ToolRail
+from brush_watermark.ui.top_bar import TopBar
 from brush_watermark.ui.update_checker import UpdateChecker
 
 
@@ -93,8 +97,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1180, 780)
         self.setStyleSheet(app_stylesheet())
 
-        self._build_menu_bar()
         self._build_ui()
+        self._build_menu_bar()
         self._connect_signals()
         self._refresh_document_list_ui()
         self.update_labels()
@@ -125,11 +129,14 @@ class MainWindow(QMainWindow):
             pixmaps.append(pixmap)
         return pixmaps
 
-    def _update_filmstrip_dirty_flags(self) -> None:
-        self.filmstrip.set_dirty_flags([doc.dirty for doc in self.docs])
+    def _update_dirty_indicators(self) -> None:
+        flags = [doc.dirty for doc in self.docs]
+        self.filmstrip.set_dirty_flags(flags)
+        self.top_bar.set_unsaved(self.doc.dirty)
+        self.top_bar.set_multi_document_mode(len(self.docs) > 1, sum(flags))
 
     def _build_menu_bar(self):
-        file_menu = self.menuBar().addMenu("&File")
+        file_menu = self.top_bar.add_menu("&File")
 
         save_action = QAction("Save && Close", self)
         save_action.triggered.connect(lambda _checked=False: self.save_and_close())
@@ -149,7 +156,7 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(lambda _checked=False: self.exit_without_saving())
         file_menu.addAction(exit_action)
 
-        tools_menu = self.menuBar().addMenu("&Tools")
+        tools_menu = self.top_bar.add_menu("&Tools")
 
         install_explorer_action = QAction(f'Install Explorer "{MENU_TEXT}"', self)
         install_explorer_action.setEnabled(sys.platform == "win32")
@@ -161,17 +168,29 @@ class MainWindow(QMainWindow):
         uninstall_explorer_action.triggered.connect(lambda _checked=False: self.uninstall_explorer_context_menu())
         tools_menu.addAction(uninstall_explorer_action)
 
-        help_menu = self.menuBar().addMenu("&Help")
+        help_menu = self.top_bar.add_menu("&Help")
         about_action = QAction("About", self)
         about_action.triggered.connect(lambda _checked=False: self.show_about())
         help_menu.addAction(about_action)
 
     def _build_ui(self):
         central = QWidget()
+        central.setObjectName("AppRoot")
         self.setCentralWidget(central)
-        root = QHBoxLayout(central)
+        root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+
+        self.top_bar = TopBar()
+        root.addWidget(self.top_bar)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        root.addLayout(body, 1)
+
+        self.tool_rail = ToolRail()
+        body.addWidget(self.tool_rail)
 
         self.canvas = CanvasWidget(
             get_view=self.get_canvas_view,
@@ -189,55 +208,59 @@ class MainWindow(QMainWindow):
             text_span_info=self.doc.text_span_info,
             on_double_click=self.handle_double_click,
         )
-
         self.canvas_scroll = QScrollArea()
         self.canvas_scroll.setObjectName("CanvasScrollArea")
         self.canvas_scroll.setWidgetResizable(True)
         self.canvas_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.canvas_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.canvas_scroll.setWidget(self.canvas)
+        self.canvas_area = CanvasArea(self.canvas_scroll)
+        self.canvas_area.hint_pill.set_tool(self.active_tool)
 
         self.filmstrip = FilmstripWidget()
+        center = QVBoxLayout()
+        center.setContentsMargins(0, 0, 0, 0)
+        center.setSpacing(0)
+        center.addWidget(self.canvas_area, 1)
+        center.addWidget(self.filmstrip)
+        body.addLayout(center, 1)
 
-        canvas_container = QWidget()
-        canvas_container_layout = QVBoxLayout(canvas_container)
-        canvas_container_layout.setContentsMargins(0, 0, 0, 0)
-        canvas_container_layout.setSpacing(0)
-        canvas_container_layout.addWidget(self.canvas_scroll, 1)
-        canvas_container_layout.addWidget(self.filmstrip)
-        root.addWidget(canvas_container, 1)
+        self.inspector_scroll = QScrollArea()
+        self.inspector_scroll.setObjectName("InspectorScroll")
+        self.inspector_scroll.setWidgetResizable(True)
+        self.inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.inspector_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.inspector_scroll.setFixedWidth(INSPECTOR_WIDTH)
+        self.inspector = InspectorPanel(self.doc.settings, self.swatch_colors)
+        self.inspector_scroll.setWidget(self.inspector)
+        body.addWidget(self.inspector_scroll)
 
-        self.sidebar_scroll = QScrollArea()
-        self.sidebar_scroll.setWidgetResizable(True)
-        self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.sidebar_scroll.setFixedWidth(SIDEBAR_WIDTH + 12)
-        root.addWidget(self.sidebar_scroll)
-
-        self.sidebar = SidebarPanel(self.doc.settings, self.swatch_colors, self.doc.metadata)
-        self.sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
-        self.sidebar_scroll.setWidget(self.sidebar)
+        self.footer = StatusFooter()
+        root.addWidget(self.footer)
 
     def _connect_signals(self):
-        self.sidebar.document_settings_changed.connect(self.document_settings_changed)
-        self.sidebar.stroke_controls_changed.connect(self.stroke_controls_changed)
-        self.sidebar.layer_item_clicked.connect(self.on_layer_item_clicked)
-        self.sidebar.delete_selected.connect(self.delete_selected_stroke)
-        self.sidebar.delete_all.connect(self.clear_all)
-        self.sidebar.save_and_close.connect(self.save_and_close)
-        self.sidebar.save_copy_and_close.connect(self.save_copy_and_close)
-        self.sidebar.save_all_and_close.connect(self.save_all_and_close)
-        self.sidebar.exit_without_saving.connect(self.exit_without_saving)
+        ins = self.inspector
+        ins.document_settings_changed.connect(self.document_settings_changed)
+        ins.stroke_controls_changed.connect(self.stroke_controls_changed)
+        ins.layer_item_clicked.connect(self.on_layer_item_clicked)
+        ins.layer_visibility_toggled.connect(self.on_layer_visibility_toggled)
+        ins.delete_selected.connect(self.delete_selected_stroke)
+        ins.delete_all.connect(self.clear_all)
+        ins.guide_suppress_changed.connect(self.set_guide_suppressed)
+        ins.auto_place_requested.connect(self.start_auto_watermark)
+        self.top_bar.save_and_close.connect(self.save_and_close)
+        self.top_bar.save_copy_and_close.connect(self.save_copy_and_close)
+        self.top_bar.save_all_and_close.connect(self.save_all_and_close)
+        self.top_bar.exit_without_saving.connect(self.exit_without_saving)
+        self.top_bar.preview_changed.connect(lambda _original: self.on_preview_mode_changed())
+        self.tool_rail.tool_changed.connect(self.set_active_tool)
+        self.tool_rail.auto_place_requested.connect(lambda: self.start_auto_watermark(ins.density()))
+        self.canvas_area.zoom_pill.zoom_mode_changed.connect(self.on_zoom_mode_changed)
+        self.footer.update_now.connect(self.start_auto_update)
         self.filmstrip.imageSelected.connect(self.switch_active_document)
-        self.sidebar.preview_mode_changed.connect(self.on_preview_mode_changed)
-        self.sidebar.update_now.connect(self.start_auto_update)
-        self.sidebar.tool_changed.connect(self.set_active_tool)
-        self.sidebar.zoom_mode_changed.connect(self.on_zoom_mode_changed)
-        self.sidebar.guide_suppress_changed.connect(self.set_guide_suppressed)
-        self.sidebar.auto_place_requested.connect(self.start_auto_watermark)
 
     def _start_update_check(self):
-        self.sidebar.set_version_info(__version__)
+        self.footer.set_version_info(__version__)
         checker = UpdateChecker(self)
         checker.completed.connect(self._on_update_check_finished)
         self._update_checker = checker
@@ -245,7 +268,7 @@ class MainWindow(QMainWindow):
 
     def _on_update_check_finished(self, result):
         self._update_result = result
-        self.sidebar.set_version_info(__version__, result)
+        self.footer.set_version_info(__version__, result)
         self._update_checker = None
 
     def start_auto_update(self):
@@ -269,18 +292,18 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
 
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
 
-        self.sidebar.set_update_progress(0, "Preparing update…")
+        self.footer.set_update_progress(0, "Preparing update…")
         updater = AutoUpdater(result.download_url, os.getpid(), sys.argv[1:])
-        updater.progress.connect(self.sidebar.set_update_progress)
+        updater.progress.connect(self.footer.set_update_progress)
         updater.failed.connect(self._on_auto_update_failed)
         self._auto_updater = updater
         updater.start()
 
     def _on_auto_update_failed(self, message: str):
         self._auto_updater = None
-        self.sidebar.clear_update_progress()
+        self.footer.clear_update_progress()
         QMessageBox.critical(
             self,
             APP_NAME,
@@ -290,7 +313,7 @@ class MainWindow(QMainWindow):
     def start_auto_watermark(self, density: int):
         if self._auto_watermark_worker is not None:
             return
-        self.sidebar.set_auto_watermark_running(True)
+        self.inspector.set_auto_watermark_running(True)
         worker = AutoWatermarkWorker(self.doc.original, density, self)
         worker.completed.connect(self._on_auto_watermark_completed)
         worker.failed.connect(self._on_auto_watermark_failed)
@@ -299,21 +322,21 @@ class MainWindow(QMainWindow):
 
     def _on_auto_watermark_completed(self, paths: list):
         self._auto_watermark_worker = None
-        self.sidebar.set_auto_watermark_running(False)
+        self.inspector.set_auto_watermark_running(False)
         added = add_paths_as_strokes(self.doc, paths)
         if added:
-            self.sidebar.set_auto_watermark_status(f"Placed {len(added)} watermark(s).")
+            self.inspector.set_auto_watermark_status(f"Placed {len(added)} watermark(s).")
             self.refresh_stroke_list()
             self.schedule_preview()
         else:
-            self.sidebar.set_auto_watermark_status(
+            self.inspector.set_auto_watermark_status(
                 "No suitable busy areas found away from the subject."
             )
 
     def _on_auto_watermark_failed(self, message: str):
         self._auto_watermark_worker = None
-        self.sidebar.set_auto_watermark_running(False)
-        self.sidebar.set_auto_watermark_status(f"Auto-placement failed: {message}")
+        self.inspector.set_auto_watermark_running(False)
+        self.inspector.set_auto_watermark_status(f"Auto-placement failed: {message}")
 
     def install_explorer_context_menu(self):
         try:
@@ -382,8 +405,8 @@ class MainWindow(QMainWindow):
             offset_x=self.offset_x,
             offset_y=self.offset_y,
             last_pointer=self.last_pointer,
-            brush_size=self.sidebar.brush_row.slider.value(),
-            show_original=self.sidebar.show_original_preview(),
+            brush_size=self.inspector.brush_row.slider.value(),
+            show_original=self.top_bar.show_original(),
             active_tool=self.active_tool,
             line_start_xy=self.line_start_xy,
             selected_anchor_index=self.selected_anchor_index,
@@ -392,11 +415,11 @@ class MainWindow(QMainWindow):
             suppress_guides=self.suppress_guides,
         )
 
-    def _sync_document_settings_from_sidebar(self):
-        self.doc.settings = self.sidebar.read_document_settings(self.doc.settings)
+    def _sync_document_settings_from_inspector(self):
+        self.doc.settings = self.inspector.read_document_settings(self.doc.settings)
 
-    def _sync_tool_defaults_from_sidebar(self):
-        tool = self.sidebar.read_tool_defaults()
+    def _sync_tool_defaults_from_inspector(self):
+        tool = self.inspector.read_tool_defaults()
         self.doc.settings.opacity = tool["opacity"]
         self.doc.settings.brush_size = tool["brush_size"]
         self.doc.settings.angle_offset = tool["angle_offset"]
@@ -410,50 +433,56 @@ class MainWindow(QMainWindow):
         return 0 <= self.doc.selected_stroke_index < len(self.doc.strokes)
 
     def update_labels(self):
-        sb = self.sidebar
-        controls = sb.read_stroke_controls()
+        ins = self.inspector
+        controls = ins.read_stroke_controls()
         brush = controls["brush_size"]
-        sb.set_slider_value(sb.opacity_row, f"{controls['opacity']}%")
-        sb.set_slider_value(sb.brush_row, f"{brush} px")
-        sb.font_size_value_label.setText(f"Font {font_size_from_brush(brush)} px (follows brush)")
-        sb.set_slider_value(sb.softness_row, f"{controls['mask_softness']} px")
-        sb.delete_selected_btn.setEnabled(self._layer_selected())
+        strength = f"{controls['opacity']}%"
+        ins.opacity_row.set_value_text(strength)
+        ins.brush_row.set_value_text(f"{brush} px")
+        ins.softness_row.set_value_text(f"{controls['mask_softness']} px")
+        ins.set_font_px(font_size_from_brush(brush))
+        ins.set_delete_enabled(self._layer_selected())
+        self.canvas_area.brush_readout.set_values(
+            controls["text_color"], brush, strength, blend_mode_label(controls["blend_mode"])
+        )
+        self.canvas_area.refresh_overlays()
 
     def document_settings_changed(self):
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
         self.update_labels()
         self.canvas.update()
         self.schedule_preview()
 
     def stroke_controls_changed(self):
         if self._layer_selected():
-            self.doc.update_selected_stroke(**self.sidebar.read_stroke_controls())
+            self.doc.update_selected_stroke(**self.inspector.read_stroke_controls())
             self.refresh_stroke_list()
         else:
-            self._sync_tool_defaults_from_sidebar()
+            self._sync_tool_defaults_from_inspector()
             save_settings(self.doc.settings.to_dict())
         self.update_labels()
         self.schedule_preview()
 
     def sync_list_selection(self):
-        self._ignore_list_selection = True
-        self.sidebar.stroke_list.blockSignals(True)
-        if self._layer_selected():
-            self.sidebar.stroke_list.setCurrentRow(self.doc.selected_stroke_index)
-        else:
-            self.sidebar.stroke_list.clearSelection()
-            self.sidebar.stroke_list.setCurrentRow(-1)
-        self.sidebar.stroke_list.blockSignals(False)
-        self._ignore_list_selection = False
+        self.inspector.set_selected_layer(self.doc.selected_stroke_index if self._layer_selected() else -1)
 
     def refresh_stroke_list(self):
-        self.sidebar.stroke_list.blockSignals(True)
-        self.sidebar.stroke_list.clear()
-        for idx, stroke in enumerate(self.doc.strokes):
-            item = QListWidgetItem(self.doc.stroke_list_text(idx, stroke))
-            self.sidebar.stroke_list.addItem(item)
-        self.sidebar.stroke_list.blockSignals(False)
-        self.sync_list_selection()
+        items = [
+            LayerItem(stroke.name, self.doc.stroke_meta_text(stroke), stroke.visible)
+            for stroke in self.doc.strokes
+        ]
+        selected = self.doc.selected_stroke_index if self._layer_selected() else -1
+        self.inspector.set_layers(items, selected)
+
+    def on_layer_visibility_toggled(self, index: int) -> None:
+        if not 0 <= index < len(self.doc.strokes):
+            return
+        stroke = self.doc.strokes[index]
+        self.doc.set_stroke_visible(index, not stroke.visible)
+        self.refresh_stroke_list()
+        if index == self.doc.selected_stroke_index:
+            self.inspector.set_brush_context(layer_name=stroke.name, visible=stroke.visible)
+        self.schedule_preview()
 
     def on_layer_item_clicked(self, row: int):
         if self._ignore_list_selection or row < 0:
@@ -472,7 +501,7 @@ class MainWindow(QMainWindow):
         self.left_press_on_selected = False
 
     def handle_wheel(self, step: int, alt: bool):
-        sb = self.sidebar
+        sb = self.inspector
         self.suppress_guides = True
         self.canvas.update()
         self._wheel_guide_timer.start(400)
@@ -499,9 +528,9 @@ class MainWindow(QMainWindow):
         self.doc.select_stroke(index)
         self.sync_list_selection()
         if self._layer_selected():
-            self.sidebar.load_stroke_controls(self.doc.strokes[index])
+            self.inspector.load_stroke_controls(self.doc.strokes[index])
         else:
-            self.sidebar.load_tool_defaults(self.doc.settings)
+            self.inspector.load_tool_defaults(self.doc.settings)
         self.update_labels()
         if refresh_preview:
             self.schedule_preview()
@@ -510,7 +539,7 @@ class MainWindow(QMainWindow):
         """Switch the displayed image (filmstrip click). Keeps every doc's edits in memory."""
         if index == self.active_index or not (0 <= index < len(self.docs)):
             return
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
 
         self.active_index = index
         self.snap_endpoint = None
@@ -529,19 +558,24 @@ class MainWindow(QMainWindow):
         self._load_active_document_into_ui()
         self.canvas.update()
 
+    def _refresh_file_info(self) -> None:
+        doc = self.doc
+        self.top_bar.set_file_info(doc.image_path.name, doc.metadata.serial, self.active_index, len(self.docs))
+
     def _load_active_document_into_ui(self) -> None:
         """Point the title, swatches, stroke list and controls at the active doc."""
         doc = self.doc
         self.setWindowTitle(f"{APP_NAME} - {doc.image_path.name}")
         self.swatch_colors = build_swatch_palette(doc.original)
-        self.sidebar.set_image_context(self.swatch_colors, doc.metadata, doc.settings.text_color)
+        self.inspector.set_swatches(self.swatch_colors, doc.settings.text_color)
+        self._refresh_file_info()
         self.selected_anchor_index = -1
         self.anchor_drag_active = False
         self.refresh_stroke_list()
         if self._layer_selected():
-            self.sidebar.load_stroke_controls(doc.strokes[doc.selected_stroke_index])
+            self.inspector.load_stroke_controls(doc.strokes[doc.selected_stroke_index])
         else:
-            self.sidebar.load_tool_defaults(doc.settings)
+            self.inspector.load_tool_defaults(doc.settings)
         self.update_labels()
         self.schedule_preview(1)
 
@@ -563,7 +597,7 @@ class MainWindow(QMainWindow):
     def schedule_preview(self, delay_ms: int = 50):
         self.update_labels()
         save_settings(self.doc.settings.to_dict())
-        self._update_filmstrip_dirty_flags()
+        self._update_dirty_indicators()
         if self.refresh_pending:
             return
         self.refresh_pending = True
@@ -576,7 +610,7 @@ class MainWindow(QMainWindow):
         canvas_w = max(1, viewport.width())
         canvas_h = max(1, viewport.height())
         include_metadata = (
-            not self.sidebar.show_original_preview()
+            not self.top_bar.show_original()
             and self.doc.settings.add_visible_metadata
         )
         content_w, content_h = self.doc.preview_content_size(include_metadata=include_metadata)
@@ -588,9 +622,10 @@ class MainWindow(QMainWindow):
             self.scale = max(0.0001, min(fit_scale, 1.0))
         else:
             self.scale = 1.0
+        self.canvas_area.zoom_pill.set_zoom_percent(round(self.scale * 100))
         self.display_w = max(1, int(self.doc.full_w * self.scale))
         self.display_h = max(1, int(self.doc.full_h * self.scale))
-        if self.sidebar.show_original_preview():
+        if self.top_bar.show_original():
             preview_image = self.doc.make_original_preview_image(self.display_w, self.display_h)
         else:
             preview_image = self.doc.make_preview_image(self.display_w, self.display_h, self.scale)
@@ -633,7 +668,9 @@ class MainWindow(QMainWindow):
             self.selected_anchor_index = -1
             self.anchor_drag_active = False
             self.suppress_guides = False
-        self.sidebar.set_active_tool(self.active_tool)
+        self.tool_rail.set_active_tool(self.active_tool)
+        self.canvas_area.hint_pill.set_tool(self.active_tool)
+        self.canvas_area.refresh_overlays()
         self.canvas.update()
 
     def keyPressEvent(self, event):
@@ -752,7 +789,7 @@ class MainWindow(QMainWindow):
 
     def _brush_press(self, img_x: int, img_y: int) -> None:
         self.left_press_img_xy = (img_x, img_y)
-        self.doc.current_brush_size = self.sidebar.brush_row.slider.value()
+        self.doc.current_brush_size = self.inspector.brush_row.slider.value()
         self.doc.current_points = []
         self.last_img_xy = None
         self.is_painting = False
@@ -838,7 +875,7 @@ class MainWindow(QMainWindow):
             self.doc.append_to_stroke(self.doc.selected_stroke_index, points)
             self.refresh_stroke_list()
         else:
-            controls = self.sidebar.read_stroke_controls()
+            controls = self.inspector.read_stroke_controls()
             opacity = controls["opacity"]
             if self.doc.settings.auto_strength:
                 opacity = opacity_for_path(
@@ -952,11 +989,11 @@ class MainWindow(QMainWindow):
         self.select_stroke_by_index(-1, refresh_preview=False)
         self.schedule_preview()
 
-    def _commit_sidebar_settings(self):
-        """Pull pending sidebar edits into the active doc/tool defaults and persist them."""
-        self._sync_document_settings_from_sidebar()
+    def _commit_inspector_settings(self):
+        """Pull pending inspector edits into the active doc/tool defaults and persist them."""
+        self._sync_document_settings_from_inspector()
         if not self._layer_selected():
-            self._sync_tool_defaults_from_sidebar()
+            self._sync_tool_defaults_from_inspector()
         save_settings(self.doc.settings.to_dict())
 
     def _confirm_save_without_strokes(self, doc: Document) -> bool:
@@ -980,7 +1017,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", str(exc))
             return False
         doc.dirty = False
-        if self.sidebar.reveal_in_explorer_check.isChecked():
+        if self.inspector.reveal_in_explorer_check.isChecked():
             reveal_in_explorer(export_path)
         return True
 
@@ -1023,12 +1060,13 @@ class MainWindow(QMainWindow):
         self.filmstrip.set_thumbnails(self._build_filmstrip_thumbnails())
         self.filmstrip.setVisible(multi)
         self.filmstrip.set_active_index(self.active_index)
-        self.sidebar.set_multi_document_mode(multi)
         self.save_all_action.setVisible(multi)
+        self._refresh_file_info()
+        self._update_dirty_indicators()
 
     def save_and_close(self):
         doc = self.doc
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
         if not self._confirm_save_without_strokes(doc):
             return
         if self._write_final_image(doc, doc.image_path):
@@ -1036,7 +1074,7 @@ class MainWindow(QMainWindow):
 
     def save_copy_and_close(self):
         doc = self.doc
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
         if not self._confirm_save_without_strokes(doc):
             return
         export_path = build_watermarked_copy_path(doc.image_path)
@@ -1044,7 +1082,7 @@ class MainWindow(QMainWindow):
             self._remove_document(self.active_index)
 
     def save_all_and_close(self):
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
         if any(not doc.strokes for doc in self.docs):
             answer = QMessageBox.question(
                 self,
@@ -1059,5 +1097,5 @@ class MainWindow(QMainWindow):
         self.close()
 
     def exit_without_saving(self):
-        self._commit_sidebar_settings()
+        self._commit_inspector_settings()
         self.close()

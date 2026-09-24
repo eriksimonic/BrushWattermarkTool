@@ -58,17 +58,6 @@ CANVAS_SPAN_TRACK = "#86EFAC"
 CANVAS_SPAN_END = "#F59E0B"
 CANVAS_ERASER = "#F87171"
 
-# Legacy names still imported by pre-redesign widgets; removed in Task 10.
-PANEL = CHROME
-INPUT = SURFACE_INPUT
-BUTTON_HOVER = SURFACE_RAISED_HOVER
-ACCENT_PRESSED = ACCENT_HOVER
-SELECTION = SURFACE_RAISED_HOVER
-SELECTION_BORDER = BORDER_HOVER
-LINK = ACCENT_TEXT
-SLIDER_HANDLE = SLIDER_THUMB
-TRACK = BORDER_STRONG
-
 
 def rgba(hex_color: str, alpha: float) -> str:
     """QSS ``rgba()`` string for a token at the given opacity (0–1)."""

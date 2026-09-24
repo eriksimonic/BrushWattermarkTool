@@ -18,8 +18,7 @@ from brush_watermark.geometry.points import (
     simplify_points,
 )
 from brush_watermark.models import Settings, Stroke
-from brush_watermark.rendering.blend import blend_mode_label, blend_mode_short, composite_watermark_layer, normalize_blend_mode
-from brush_watermark.rendering.colors import color_short
+from brush_watermark.rendering.blend import blend_mode_label, composite_watermark_layer, normalize_blend_mode
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_stroke_watermark_layer
 from brush_watermark.services.exif_metadata import read_exif_bytes, read_image_metadata
@@ -61,18 +60,6 @@ class Document:
 
     def visible_strokes(self) -> list[Stroke]:
         return [s for s in self.strokes if s.visible]
-
-    def stroke_list_text(self, idx: int, stroke: Stroke) -> str:
-        eye = "👁" if stroke.visible else "🚫"
-        length = int(path_length(stroke.points))
-        color = color_short(stroke.text_color)
-        return (
-            f"{eye}  {stroke.name}  |  len {length}px  |  "
-            f"b{stroke.brush_size}  |  s{stroke.opacity}%  |  "
-            f"{blend_mode_short(stroke.blend_mode)}  |  #{color}  |  "
-            f"{'repeat' if stroke.repeat_text else 'stretch'}"
-            f"{f' +{stroke.repeat_spacing}' if stroke.repeat_text else ''}"
-        )
 
     def stroke_meta_text(self, stroke: Stroke) -> str:
         """One-line layer summary for the inspector's layer list."""
