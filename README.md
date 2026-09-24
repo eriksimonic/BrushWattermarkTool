@@ -25,7 +25,8 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 - **Metadata strip** — optional footer with camera, lens, exposure, serial number, and custom copy text (read from EXIF)
 - **Save copy** — export a watermarked copy with an auto-generated filename (`{name}_{serial}_{datetime}_watermarked.jpg`) without overwriting the original
 - **EXIF preservation** — camera metadata is carried through when saving
-- **Menu bar** — File, Tools (Windows Explorer shortcut), and Help actions
+- **Modern dark editor** — top bar with File/Tools/Help menus and save actions, tool rail, floating tool hints and zoom controls, collapsible inspector, and a shortcut footer
+- **Layer visibility** — hide or show individual watermark strokes from the layer list (hidden strokes aren't saved)
 - **Auto update check** — compares your version to the latest release on GitHub
 - **One-click update** — packaged Windows builds can download and install the latest release automatically
 - **Cross-platform** — Windows, macOS, and Linux builds plus run-from-source support
@@ -96,25 +97,29 @@ chmod +x BrushWatermark/BrushWatermark   # if needed
 | Change brush / font size | Alt + mouse wheel |
 | Cancel line / deselect anchor | Escape |
 
-### Menu bar
+### Menus
 
-- **File** — Save & Close, Save Copy & Close, Exit Without Saving
+- **File** — Save & Close, Save Copy & Close, Save All & Close (with several images), Exit Without Saving (also available from the top bar's Exit, Save copy and Save & close buttons)
 - **Tools** — Install or remove the Windows Explorer right-click shortcut for JPG/JPEG files; multi-selecting files and choosing it opens them all in one window with a filmstrip to switch between them (files that can't be opened are skipped with a warning)
 - **Help** — About (version and usage)
 
-### Sidebar
+### Window layout
 
-Lightroom-style panels on the right: section dividers, label-left / value-right sliders with teardrop handles, and neutral gray chrome (`#3B3B3B` panel, `#2A2A2A` canvas surround). See [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui/DESIGN.md) for the full UI spec.
+A modern dark editor — see [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui/DESIGN.md) for the full UI spec.
 
-- **Image** — camera serial from EXIF; optional **Add visible metadata strip** and custom copy text for the footer
-- **Tools** — Pointer, Brush, Path, and Eraser buttons
-- **Watermark** — text, font, and auto-fit (applies to all strokes)
-- **Auto Watermark** — density slider and an **Auto-Place Watermarks** button that finds busy, detail-rich areas away from the photo's subject and drops several faint watermarks there automatically
-- **Brush** — color, blend mode, auto strength (computes opacity from the underlying pixels instead of a fixed value), strength, brush size, softness, and repeat along stroke; sets **tool defaults** when nothing is selected, or edits the **selected layer** (section title shows `Layer · …`)
-- **Layers** — stroke list; **Delete** or **Clear all**
-- **Help** — shortcuts, current version, and link to a newer release if one is available
+- **Top bar** — menus, the current file name, camera serial and image index, an **Unsaved** indicator, the **Original | Watermarked** preview toggle, and **Exit**, **Save copy** and **Save & close** (its menu adds **Save all & close** when several images are open)
+- **Tool rail** — Select (V), Brush (B), Path (A), Eraser (E), **Auto-place watermarks**, and a keyboard-shortcuts popup
+- **Canvas** — floating hints for the current tool, **Fit / 1:1** zoom with the current zoom %, and a readout of the brush colour, size, strength and blend mode
+- **Inspector**
+  - **Watermark** — text, font (its size follows the brush), auto-fit, and repeat along stroke with a gap
+  - **Brush** — colour, blend mode, strength (with **Auto** strength, which computes opacity from the underlying pixels), size and softness. These set **tool defaults** when nothing is selected, or edit the **selected layer** (the section title shows `Layer · …`)
+  - **Auto watermark** — density and **Auto-place**
+  - **Layers** — each stroke with an eye toggle to hide it; **Delete** or **Clear all**
+  - **Export** — visible metadata strip, extra copy text, and **Show in Explorer after save**
+- **Filmstrip** — with several images, numbered thumbnails with an unsaved marker
+- **Footer** — common shortcuts, and the version with update status (an **Update to vX** button appears when a new release is available)
 
-**Save and close** overwrites the opened image (JPEG quality 95). **Save copy and close** writes a new file next to the original using serial and capture date from EXIF when available. Enable **Show in Explorer after save** to open the file location when done. **Show original (before preview)** toggles a clean preview without watermarks or guides. **Exit without saving** discards changes to the image (tool defaults and watermark text are still saved to settings).
+**Save & close** overwrites the opened image (JPEG quality 95). **Save copy** writes a new file next to the original, named from the serial and capture date in EXIF when available. **Show in Explorer after save** opens the file's location when done. **Original** shows a clean preview without watermarks or guides. **Exit** discards changes to the image; tool defaults and watermark text are still saved to settings.
 
 ### Settings file
 
