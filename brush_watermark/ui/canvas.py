@@ -1,15 +1,18 @@
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from PySide6.QtCore import Qt, QPointF, QRectF
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen, QWheelEvent
+from PySide6.QtCore import Qt, QPointF
+from PySide6.QtGui import QBrush, QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView, ToolMode
 from brush_watermark.ui.design_tokens import (
-    CANVAS_ANCHOR_OUTLINE,
+    ACCENT,
+    ACCENT_BRIGHT,
+    ANCHOR_FILL,
     CANVAS_BG,
+    CANVAS_DOT,
     CANVAS_DRAWING,
     CANVAS_ERASER,
     CANVAS_SPAN_END,
@@ -20,6 +23,19 @@ from brush_watermark.ui.design_tokens import (
 
 if TYPE_CHECKING:
     pass
+
+
+DOT_SPACING = 20
+
+
+def make_dot_tile(spacing: int = DOT_SPACING) -> QPixmap:
+    """One tile of the dotted canvas background (a 2 px dot at the top-left)."""
+    tile = QPixmap(spacing, spacing)
+    tile.fill(QColor(CANVAS_BG))
+    painter = QPainter(tile)
+    painter.fillRect(0, 0, 2, 2, QColor(CANVAS_DOT))
+    painter.end()
+    return tile
 
 
 class CanvasWidget(QWidget):
@@ -57,6 +73,7 @@ class CanvasWidget(QWidget):
         self._text_span_info = text_span_info
         self._on_double_click = on_double_click
         self.preview_pixmap = preview_pixmap
+        self._background = QBrush(make_dot_tile())
 
         self.setMouseTracking(True)
         self.setMinimumSize(400, 300)
@@ -67,7 +84,7 @@ class CanvasWidget(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        p.fillRect(self.rect(), QColor(CANVAS_BG))
+        p.fillRect(self.rect(), self._background)
 
         if self.preview_pixmap is not None:
             p.drawPixmap(int(view.offset_x), int(view.offset_y), self.preview_pixmap)
@@ -185,19 +202,18 @@ class CanvasWidget(QWidget):
             self._draw_line_rubber_band(p, view)
 
     def _draw_anchor_handles(self, p: QPainter, view: CanvasView, stroke):
-        """Draw the smooth curve plus square handles at the editable anchors."""
+        """Draw the smooth curve plus round white handles (blue ring) at the editable anchors."""
         if len(stroke.points) >= 2 and not view.suppress_guides:
-            self._draw_polyline(p, stroke.points, HANDLE, 1.0, dashed=True, alpha=160)
+            self._draw_polyline(p, stroke.points, ACCENT_BRIGHT, 1.0, dashed=True, alpha=220)
 
         anchors = stroke.anchors if stroke.anchors else stroke.points
-        p.setPen(QPen(QColor(CANVAS_ANCHOR_OUTLINE), 1))
+        p.setPen(QPen(QColor(ACCENT), 1.5))
         for i, (px, py) in enumerate(anchors):
             cx, cy = self._image_to_canvas(px, py)
-            is_selected = (i == view.selected_anchor_index)
-            size = 6.0 if is_selected else 4.0
-            fill = QColor(CANVAS_DRAWING) if is_selected else QColor(HANDLE)
-            p.setBrush(fill)
-            p.drawRect(QRectF(cx - size, cy - size, size * 2, size * 2))
+            is_selected = i == view.selected_anchor_index
+            radius = 6.0 if is_selected else 4.0
+            p.setBrush(QColor(CANVAS_DRAWING) if is_selected else QColor(ANCHOR_FILL))
+            p.drawEllipse(QPointF(cx, cy), radius, radius)
 
     def _draw_snap_indicator(self, p: QPainter, view: CanvasView):
         """Green circle + crosshair at a stroke endpoint the cursor is hovering near."""

@@ -57,7 +57,6 @@ CANVAS_SPAN_START = "#22C55E"
 CANVAS_SPAN_TRACK = "#86EFAC"
 CANVAS_SPAN_END = "#F59E0B"
 CANVAS_ERASER = "#F87171"
-CANVAS_ANCHOR_OUTLINE = "#000000"
 
 # Legacy names still imported by pre-redesign widgets; removed in Task 10.
 PANEL = CHROME
