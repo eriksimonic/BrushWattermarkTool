@@ -2,6 +2,7 @@ from PIL import Image, ImageDraw
 import math
 
 from brush_watermark.geometry.path_text import (
+    PathSampler,
     angle_unwrap,
     blend_angles,
     centered_baseline_offset,
@@ -186,6 +187,7 @@ def _draw_glyphs_on_path(
     prev_tangent: float | None = None,
 ) -> None:
     avg_advance = sum(g[1] for g in glyphs) / len(glyphs)
+    sampler = PathSampler(points)
     pos = start_d
     while pos < end_d:
         if repeat and pos > start_d and repeat_gap > 0:
@@ -196,13 +198,14 @@ def _draw_glyphs_on_path(
             if pos + advance > end_d:
                 return
             center_d = pos + advance / 2.0
-            x, y, _ = point_at_distance(points, center_d)
+            x, y, _ = sampler.point_at(center_d)
             half_window = tangent_half_window(max(advance, avg_advance))
             raw_tangent = tangent_angle_at_distance(
                 points,
                 center_d,
                 half_window,
                 total_length=length,
+                sampler=sampler,
             )
             if prev_tangent is not None:
                 raw_tangent = angle_unwrap(prev_tangent, raw_tangent)

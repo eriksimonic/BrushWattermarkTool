@@ -4,7 +4,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
+from brush_watermark.geometry.path_text import PathSampler, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView, ToolMode
 from brush_watermark.ui.design_tokens import (
@@ -173,13 +173,14 @@ class CanvasWidget(QWidget):
         font_size = span_info.font_size
 
         sampled = []
+        sampler = PathSampler(points)
         d = start_d
         step = max(8.0, font_size / 4.0)
         while d <= end_d:
-            x, y, _ = point_at_distance(points, d)
+            x, y, _ = sampler.point_at(d)
             sampled.append((int(x), int(y)))
             d += step
-        x, y, _ = point_at_distance(points, end_d)
+        x, y, _ = sampler.point_at(end_d)
         sampled.append((int(x), int(y)))
 
         self._draw_polyline(p, sampled, CANVAS_SPAN_TRACK, 2.0, dashed=True)

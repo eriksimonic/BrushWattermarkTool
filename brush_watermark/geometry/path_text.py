@@ -1,32 +1,59 @@
 import math
+from bisect import bisect_left
 
 from brush_watermark.geometry.points import Point, dist, path_length, simplify_points
 
 MIN_TANGENT_WIDTH_CHARS = 3.0
 
 
-def point_at_distance(points: list[Point], target: float) -> tuple[float, float, float]:
-    if len(points) < 2:
-        x, y = points[0]
-        return x, y, 0.0
-    remaining = target
-    for i in range(len(points) - 1):
-        p0 = points[i]
-        p1 = points[i + 1]
-        seg = dist(p0, p1)
-        if seg <= 0:
-            continue
-        if remaining <= seg:
-            t = remaining / seg
+class PathSampler:
+    """Point/angle at a distance along a path, in O(log n) per lookup.
+
+    Segment lengths are measured once up front. Walking the path from its
+    start on every lookup made text rendering cost glyphs × points, which
+    stalled the UI for long strokes with repeated text.
+    """
+
+    def __init__(self, points: list[Point]):
+        self.points = points
+        self._index: list[int] = []  # start point of each non-zero segment
+        self._starts: list[float] = []  # distance where that segment starts
+        self._ends: list[float] = []  # ... and ends
+        total = 0.0
+        for i in range(len(points) - 1):
+            seg = dist(points[i], points[i + 1])
+            if seg <= 0:
+                continue
+            self._index.append(i)
+            self._starts.append(total)
+            total += seg
+            self._ends.append(total)
+        self.length = total
+
+    def point_at(self, target: float) -> tuple[float, float, float]:
+        points = self.points
+        if len(points) < 2:
+            x, y = points[0]
+            return x, y, 0.0
+        # The first segment that ends at or after `target` (the linear walk's
+        # "remaining <= seg"); a negative target extrapolates the first one.
+        k = bisect_left(self._ends, target)
+        if k < len(self._ends):
+            i = self._index[k]
+            p0, p1 = points[i], points[i + 1]
+            t = (target - self._starts[k]) / (self._ends[k] - self._starts[k])
             x = p0[0] + (p1[0] - p0[0]) * t
             y = p0[1] + (p1[1] - p0[1]) * t
-            angle = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
-            return x, y, angle
-        remaining -= seg
-    p0 = points[-2]
-    p1 = points[-1]
-    angle = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
-    return float(p1[0]), float(p1[1]), angle
+            return x, y, math.atan2(p1[1] - p0[1], p1[0] - p0[0])
+        p0 = points[-2]
+        p1 = points[-1]
+        angle = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
+        return float(p1[0]), float(p1[1]), angle
+
+
+def point_at_distance(points: list[Point], target: float) -> tuple[float, float, float]:
+    """One-off lookup; build a PathSampler when looking up many distances."""
+    return PathSampler(points).point_at(target)
 
 
 def smooth_path_for_text(
@@ -66,19 +93,22 @@ def tangent_angle_at_distance(
     half_window: float,
     *,
     total_length: float | None = None,
+    sampler: PathSampler | None = None,
 ) -> float:
-    length = total_length if total_length is not None else path_length(points)
+    if sampler is None:
+        sampler = PathSampler(points)
+    length = total_length if total_length is not None else sampler.length
     if length <= 0:
         return 0.0
 
     d0 = max(0.0, center_d - half_window)
     d1 = min(length, center_d + half_window)
     if d1 - d0 < 1e-6:
-        _, _, angle = point_at_distance(points, center_d)
+        _, _, angle = sampler.point_at(center_d)
         return angle
 
-    x0, y0, _ = point_at_distance(points, d0)
-    x1, y1, _ = point_at_distance(points, d1)
+    x0, y0, _ = sampler.point_at(d0)
+    x1, y1, _ = sampler.point_at(d1)
     return math.atan2(y1 - y0, x1 - x0)
 
 

@@ -1,6 +1,7 @@
 from brush_watermark.geometry.path_text import (
     MIN_TANGENT_WIDTH_CHARS,
     angle_unwrap,
+    PathSampler,
     averaged_angle,
     blend_angles,
     glyph_rotation_degrees,
@@ -23,6 +24,7 @@ __all__ = [
     "Point",
     "MIN_TANGENT_WIDTH_CHARS",
     "angle_unwrap",
+    "PathSampler",
     "averaged_angle",
     "blend_angles",
     "clamp",
