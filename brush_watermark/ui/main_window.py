@@ -35,7 +35,7 @@ from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
-from brush_watermark.ui.filmstrip import THUMB_SIZE, FilmstripWidget
+from brush_watermark.ui.filmstrip import THUMB_H, THUMB_W, FilmstripWidget
 from brush_watermark.ui.sidebar import SIDEBAR_WIDTH, SidebarPanel
 from brush_watermark.ui.styles import app_stylesheet
 from brush_watermark.ui.update_checker import UpdateChecker
@@ -117,9 +117,9 @@ class MainWindow(QMainWindow):
         pixmaps = []
         for doc in self.docs:
             pixmap = pil_to_qpixmap(doc.original).scaled(
-                THUMB_SIZE,
-                THUMB_SIZE,
-                Qt.AspectRatioMode.KeepAspectRatio,
+                THUMB_W,
+                THUMB_H,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
             pixmaps.append(pixmap)
