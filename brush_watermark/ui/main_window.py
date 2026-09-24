@@ -1267,6 +1267,8 @@ class MainWindow(QMainWindow):
             return
         self.docs.extend(new_docs)
         self._refresh_document_list_ui()
+        # The filmstrip may have just appeared and shrunk the canvas; refit.
+        self.schedule_preview(1)
 
     def _remove_document(self, index: int) -> None:
         """Drop a saved image from the session; close the window once none remain."""

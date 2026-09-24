@@ -423,6 +423,10 @@ def test_add_images_appends_documents(make_window, tmp_path, monkeypatch):
     window.add_images_action.trigger()
     assert [doc.image_path.name for doc in window.docs] == ["img0.jpg", "extra.jpg"]
     assert not window.filmstrip.isHidden()
+    # The filmstrip appeared and shrank the canvas: the fit is redone for it.
+    QTest.qWait(30)
+    viewport_h = window.canvas_scroll.viewport().height()
+    assert window.offset_y == (viewport_h - window.canvas.preview_draw_size[1]) // 2
     window.filmstrip.add_tile.click()  # the same file again is ignored
     assert len(window.docs) == 2
 
@@ -432,3 +436,58 @@ def test_add_images_cancelled_changes_nothing(make_window, monkeypatch):
     monkeypatch.setattr(main_window, "select_jpg_files", lambda parent=None: [])
     window.add_images()
     assert len(window.docs) == 1
+
+
+def _activate(window):
+    window.activateWindow()
+    assert QTest.qWaitForWindowActive(window)
+
+
+def test_real_space_keys_hold_pan_and_do_not_click_a_focused_button(make_window):
+    window = make_window()
+    add_stroke(window)
+    window.select_stroke_by_index(0)
+    _activate(window)
+    delete_btn = window.inspector.delete_selected_btn
+    delete_btn.setFocus()
+    QTest.keyPress(delete_btn, Qt.Key.Key_Space)
+    assert window._should_pan()
+    QTest.keyRelease(delete_btn, Qt.Key.Key_Space)
+    assert not window._should_pan()
+    assert len(window.doc.strokes) == 1
+
+
+def test_real_space_types_into_the_watermark_text(make_window):
+    window = make_window()
+    _activate(window)
+    edit = window.inspector.watermark_text_edit
+    edit.setFocus()
+    edit.setText("a")
+    QTest.keyClick(edit, Qt.Key.Key_Space)
+    assert edit.text() == "a " and not window._space_held
+
+
+def test_real_ctrl_s_and_ctrl_right_fire(make_window, monkeypatch):
+    from PySide6.QtGui import QKeySequence
+
+    window = make_window(2)
+    _activate(window)
+    seen = []
+    monkeypatch.setattr(window, "save_and_close", lambda: seen.append("save"))
+    QTest.keySequence(window, QKeySequence("Ctrl+S"))
+    QTest.keySequence(window, QKeySequence("Ctrl+Right"))
+    assert seen == ["save"] and window.active_index == 1
+
+
+def test_footer_fits_the_minimum_window_width_with_every_hint(make_window):
+    from brush_watermark.services.update_check import UpdateCheckResult
+
+    window = make_window(2)
+    window.footer.set_version_info(
+        "1.16.0",
+        UpdateCheckResult(
+            update_available=True, download_url="x", release_url="y",
+            current_version="1.16.0", latest_version="1.17.0", check_failed=False,
+        ),
+    )
+    assert window.footer.minimumSizeHint().width() <= window.minimumWidth()

@@ -122,3 +122,22 @@ def test_hint_pill_shows_a_custom_hint(qapp):
     area = CanvasArea(QScrollArea())
     area.hint_pill.set_hint(*PICK_COLOR_HINT)
     assert area.hint_pill.tool_label.text() == "Pick colour"
+
+
+def test_zoom_field_shows_the_applied_zoom_after_enter(qapp):
+    from PySide6.QtTest import QTest
+
+    area = CanvasArea(QScrollArea())
+    area.resize(800, 600)
+    area.show()
+    area.activateWindow()
+    assert QTest.qWaitForWindowActive(area)
+    pill = area.zoom_pill
+    # Stand-in for the window: clamp to 400 % and report it back.
+    pill.zoom_percent_entered.connect(lambda scale: pill.set_zoom_percent(round(scale * 100)))
+    pill.percent_edit.setFocus()
+    qapp.processEvents()
+    assert pill.percent_edit.hasFocus()
+    pill.percent_edit.setText("9000")
+    QTest.keyClick(pill.percent_edit, Qt.Key.Key_Return)
+    assert pill.percent_edit.text() == "400%"

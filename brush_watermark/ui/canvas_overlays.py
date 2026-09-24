@@ -110,6 +110,12 @@ class ZoomField(QLineEdit):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.clearFocus()
 
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        # Show the zoom actually applied (e.g. 400% after typing 9000), or
+        # the old value after garbage.
+        self.setText(self.property("shownText") or "")
+
 
 class ZoomPill(FloatingPanel):
     zoom_mode_changed = Signal(bool)  # True = 1:1, False = Fit
