@@ -5,7 +5,7 @@ a plain widget styled by object name in styles.py.
 """
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QFontMetrics, QPainter
 from PySide6.QtWidgets import (
     QAbstractButton,
     QButtonGroup,
@@ -284,6 +284,53 @@ class Chip(QPushButton):
         if icon_name:
             self.setIcon(get_icon_checkable(icon_name, 11, TEXT_LABEL, ACCENT_TEXT))
             self.setIconSize(QSize(11, 11))
+
+
+class ElidedLabel(QLabel):
+    """A QLabel that elides its text to fit the space it's given.
+
+    ``sizeHint()`` reports the width of the *full* text (so the layout grows
+    it back when space frees up), while ``minimumSizeHint()`` stays small (so
+    the layout can shrink it instead of clipping a sibling). The full text is
+    always available as the tooltip and via ``full_text()``.
+    """
+
+    def __init__(
+        self,
+        text: str = "",
+        elide_mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._elide_mode = elide_mode
+        self._full_text = ""
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setMinimumWidth(20)
+        if text:
+            self.setText(text)
+
+    def full_text(self) -> str:
+        return self._full_text
+
+    def setText(self, text: str) -> None:
+        self._full_text = text
+        self.setToolTip(text)
+        self._apply_elided()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_elided()
+
+    def sizeHint(self) -> QSize:
+        metrics = QFontMetrics(self.font())
+        return QSize(metrics.horizontalAdvance(self._full_text) + 2, super().sizeHint().height())
+
+    def _apply_elided(self) -> None:
+        if self.width() <= 0:
+            super().setText(self._full_text)
+            return
+        metrics = QFontMetrics(self.font())
+        super().setText(metrics.elidedText(self._full_text, self._elide_mode, self.width()))
 
 
 class KeyBadge(QLabel):

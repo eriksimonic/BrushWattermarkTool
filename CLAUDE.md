@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Brush Watermark Tool — a PySide6 (Qt for Python) desktop app that paints brush-shaped text watermarks along a hand-drawn stroke path on JPG photos, styled after Adobe Lightroom Classic's dark UI. Each watermark is baked into the saved JPEG; original EXIF is preserved. Settings persist at `~/.lightroom_brush_watermark/settings.json`.
+Brush Watermark Tool — a PySide6 (Qt for Python) desktop app that paints brush-shaped text watermarks along a hand-drawn stroke path on JPG photos, with a modern dark editor UI (see `brush_watermark/ui/DESIGN.md`). Each watermark is baked into the saved JPEG; original EXIF is preserved. Settings persist at `~/.lightroom_brush_watermark/settings.json`.
 
 ## Commands
 

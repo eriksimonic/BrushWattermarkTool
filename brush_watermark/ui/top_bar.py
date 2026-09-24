@@ -3,7 +3,7 @@
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QSizePolicy, QWidget
 
-from brush_watermark.ui.controls import SegmentedControl, SplitButton, make_menu
+from brush_watermark.ui.controls import ElidedLabel, SegmentedControl, SplitButton, make_menu
 from brush_watermark.ui.design_tokens import ON_ACCENT, TEXT, TEXT_MUTED, TEXT_SECONDARY
 from brush_watermark.ui.icons import get_icon, get_pixmap
 
@@ -49,8 +49,9 @@ class TopBar(QFrame):
 
         file_icon = QLabel()
         file_icon.setPixmap(get_pixmap("image", 15, TEXT_MUTED))
-        self.file_name_label = QLabel()
+        self.file_name_label = ElidedLabel(elide_mode=Qt.TextElideMode.ElideMiddle)
         self.file_name_label.setObjectName("FileName")
+        self.file_name_label.setMinimumWidth(80)
         self.serial_chip = QLabel()
         self.serial_chip.setObjectName("SerialChip")
         self.serial_chip.setToolTip("Image serial")

@@ -146,10 +146,14 @@ def app_stylesheet() -> str:
     QPushButton#PrimaryButton:hover, QPushButton#SplitMain:hover, QPushButton#SplitArrow:hover {{
         background: {ACCENT_HOVER};
     }}
-    QPushButton#SplitMain {{ border-top-right-radius: 0; border-bottom-right-radius: 0; padding: 0 14px; }}
+    QPushButton#SplitMain {{
+        border-top-right-radius: 0; border-bottom-right-radius: 0; padding: 0 14px;
+        min-height: 32px; max-height: 32px;
+    }}
     QPushButton#SplitArrow {{
         border-top-left-radius: 0; border-bottom-left-radius: 0;
         border-left: 1px solid {rgba(ON_ACCENT, 0.22)}; padding: 0 8px;
+        min-height: 32px; max-height: 32px;
     }}
     QPushButton#MenuButton {{
         color: {TEXT_SECONDARY}; border-radius: 6px; padding: 0 9px;

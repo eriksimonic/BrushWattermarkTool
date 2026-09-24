@@ -119,7 +119,7 @@ A modern dark editor — see [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui
 - **Filmstrip** — with several images, numbered thumbnails with an unsaved marker
 - **Footer** — common shortcuts, and the version with update status (an **Update to vX** button appears when a new release is available)
 
-**Save & close** overwrites the opened image (JPEG quality 95). **Save copy** writes a new file next to the original, named from the serial and capture date in EXIF when available. **Show in Explorer after save** opens the file's location when done. **Original** shows a clean preview without watermarks or guides. **Exit** discards changes to the image; tool defaults and watermark text are still saved to settings.
+**Save & close** overwrites the opened image (JPEG quality 95). **Save copy** writes a new file next to the original, named from the serial and capture date in EXIF when available, then closes the image. **Show in Explorer after save** opens the file's location when done. **Original** shows a clean preview without watermarks or guides. **Exit** discards changes to the image; tool defaults and watermark text are still saved to settings.
 
 ### Settings file
 

@@ -73,6 +73,31 @@ def test_tool_rail_and_keys_switch_tools(make_window):
     assert window.tool_rail.buttons[ToolMode.POINTER].isChecked()
 
 
+def test_auto_place_button_disabled_while_running(make_window, monkeypatch):
+    window = make_window()
+
+    class _FakeWorker:
+        completed = type("Signal", (), {"connect": lambda self, _cb: None})()
+        failed = type("Signal", (), {"connect": lambda self, _cb: None})()
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def isRunning(self):
+            return False
+
+    monkeypatch.setattr("brush_watermark.ui.main_window.AutoWatermarkWorker", _FakeWorker)
+    assert window.tool_rail.auto_place_btn.isEnabled()
+    window.start_auto_watermark(50)
+    assert not window.tool_rail.auto_place_btn.isEnabled()
+    window._set_auto_watermark_running(False)
+    window._auto_watermark_worker = None
+    assert window.tool_rail.auto_place_btn.isEnabled()
+
+
 def test_preview_toggle_shows_original(make_window):
     window = make_window()
     window.top_bar.preview_toggle.setCurrentIndex(0)

@@ -23,7 +23,13 @@ TOOL_HINTS: dict[ToolMode, tuple[str, tuple[tuple[str, str], ...]]] = {
     ToolMode.POINTER: ("Select", (("Click", "Select / deselect"),)),
     ToolMode.BRUSH: (
         "Brush",
-        (("Drag", "Freehand"), ("Click", "Straight line"), ("Click end", "Resume"), ("Right-click", "Stop")),
+        (
+            ("Drag", "Freehand"),
+            ("Click", "Straight line"),
+            ("Click end", "Resume"),
+            ("Right-click", "Stop"),
+            ("Esc", "Cancel line"),
+        ),
     ),
     ToolMode.PATH: ("Path", (("Drag", "Move anchor"), ("Dbl-click", "Add anchor"), ("Del", "Remove anchor"))),
     ToolMode.ERASER: ("Eraser", (("Drag", "Erase"), ("Alt+Wheel", "Size"))),
@@ -79,6 +85,7 @@ class HintPill(FloatingPanel):
         self._hints = [KeyHint(keys, text) for keys, text in hints]
         for widget in self._hints:
             self.row.addWidget(widget)
+            widget.show()
         self.adjustSize()
 
 

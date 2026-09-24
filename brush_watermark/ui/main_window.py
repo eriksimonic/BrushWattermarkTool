@@ -86,7 +86,6 @@ class MainWindow(QMainWindow):
         self._line_stopped: bool = False
         self.selected_anchor_index: int = -1
         self.anchor_drag_active: bool = False
-        self._ignore_list_selection = False
         self._update_checker: UpdateChecker | None = None
         self._auto_updater: AutoUpdater | None = None
         self._update_result: UpdateCheckResult | None = None
@@ -313,16 +312,20 @@ class MainWindow(QMainWindow):
     def start_auto_watermark(self, density: int):
         if self._auto_watermark_worker is not None:
             return
-        self.inspector.set_auto_watermark_running(True)
+        self._set_auto_watermark_running(True)
         worker = AutoWatermarkWorker(self.doc.original, density, self)
         worker.completed.connect(self._on_auto_watermark_completed)
         worker.failed.connect(self._on_auto_watermark_failed)
         self._auto_watermark_worker = worker
         worker.start()
 
+    def _set_auto_watermark_running(self, running: bool) -> None:
+        self.inspector.set_auto_watermark_running(running)
+        self.tool_rail.auto_place_btn.setEnabled(not running)
+
     def _on_auto_watermark_completed(self, paths: list):
         self._auto_watermark_worker = None
-        self.inspector.set_auto_watermark_running(False)
+        self._set_auto_watermark_running(False)
         added = add_paths_as_strokes(self.doc, paths)
         if added:
             self.inspector.set_auto_watermark_status(f"Placed {len(added)} watermark(s).")
@@ -335,7 +338,7 @@ class MainWindow(QMainWindow):
 
     def _on_auto_watermark_failed(self, message: str):
         self._auto_watermark_worker = None
-        self.inspector.set_auto_watermark_running(False)
+        self._set_auto_watermark_running(False)
         self.inspector.set_auto_watermark_status(f"Auto-placement failed: {message}")
 
     def install_explorer_context_menu(self):
@@ -485,7 +488,7 @@ class MainWindow(QMainWindow):
         self.schedule_preview()
 
     def on_layer_item_clicked(self, row: int):
-        if self._ignore_list_selection or row < 0:
+        if row < 0:
             return
         if row == self.doc.selected_stroke_index:
             self.select_stroke_by_index(-1)

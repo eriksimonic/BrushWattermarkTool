@@ -1,3 +1,5 @@
+from PySide6.QtWidgets import QWidget
+
 from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.status_footer import StatusFooter
 
@@ -44,6 +46,22 @@ def test_failed_check_shows_version_only(qapp):
     footer = StatusFooter()
     footer.set_version_info("1.15.0", result(check_failed=True))
     assert footer.version_label.text() == "v1.15.0"
+
+
+def test_update_widgets_fit_at_minimum_window_width(qapp):
+    container = QWidget()
+    footer = StatusFooter(container)
+    footer.setGeometry(0, 0, 1180, StatusFooter.HEIGHT)
+    container.resize(1180, StatusFooter.HEIGHT)
+    container.show()
+    assert footer.width() == 1180
+    footer.set_version_info(
+        "1.15.0", result(latest_version="1.16.0", update_available=True, download_url="https://example.invalid/z")
+    )
+    footer.set_update_progress(45, "Downloading update…")
+    qapp.processEvents()
+    assert footer.update_now_button.width() >= footer.update_now_button.minimumSizeHint().width()
+    assert footer.progress_label.width() >= footer.progress_label.sizeHint().width()
 
 
 def test_progress(qapp):

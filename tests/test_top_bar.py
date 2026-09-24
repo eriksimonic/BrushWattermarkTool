@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMenu, QPushButton
+from PySide6.QtWidgets import QMenu, QPushButton, QWidget
 
 from brush_watermark.ui.top_bar import TopBar
 
@@ -43,6 +43,25 @@ def test_save_buttons_and_actions_emit(qapp):
     bar.save_copy_action.trigger()
     bar.save_close_action.trigger()
     assert seen == ["save", "copy", "exit", "all", "copy", "save"]
+
+
+def test_long_file_name_elides_and_keeps_minimum_width_within_window(qapp):
+    container = QWidget()
+    bar = TopBar(container)
+    bar.setGeometry(0, 0, 1180, TopBar.HEIGHT)
+    container.resize(1180, TopBar.HEIGHT)
+    container.show()
+    assert bar.width() == 1180
+    long_name = "x" * 80 + ".jpg"
+    bar.set_file_info(long_name, "6022905", 1, 6)
+    bar.set_unsaved(True)
+    bar.resize(1180, TopBar.HEIGHT)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance().processEvents()
+    assert bar.minimumSizeHint().width() <= 1180
+    assert bar.file_name_label.toolTip() == long_name
+    assert "…" in bar.file_name_label.text()
 
 
 def test_multi_document_mode_shows_edited_count(qapp):

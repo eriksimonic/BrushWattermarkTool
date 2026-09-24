@@ -4,7 +4,7 @@ from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
 from brush_watermark.services.update_check import UpdateCheckResult
-from brush_watermark.ui.controls import KeyHint
+from brush_watermark.ui.controls import ElidedLabel, KeyHint
 from brush_watermark.ui.design_tokens import ON_ACCENT, SUCCESS, TEXT_MUTED, WARNING
 from brush_watermark.ui.icons import get_icon
 
@@ -31,7 +31,7 @@ class StatusFooter(QFrame):
         for keys, text in FOOTER_HINTS:
             row.addWidget(KeyHint(keys, text, text_object_name="FooterText"))
         row.addStretch(1)
-        note = QLabel("Controls edit the selected layer, or tool defaults when nothing is selected")
+        note = ElidedLabel("Controls edit the selected layer, or tool defaults when nothing is selected")
         note.setObjectName("FooterText")
         row.addWidget(note)
         divider = QFrame()

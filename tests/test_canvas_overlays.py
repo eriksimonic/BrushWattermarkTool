@@ -20,6 +20,16 @@ def test_hint_pill_follows_tool(qapp):
     assert area.hint_pill.tool_label.text() == "Path"
 
 
+def test_hint_pill_resizes_immediately_on_tool_switch(qapp):
+    area = CanvasArea(QScrollArea())
+    area.resize(1000, 700)
+    area.show()
+    qapp.processEvents()
+    area.hint_pill.set_tool(ToolMode.PATH)
+    qapp.processEvents()
+    assert area.hint_pill.width() >= area.hint_pill.sizeHint().width()
+
+
 def test_zoom_pill_emits_mode(qapp):
     area = CanvasArea(QScrollArea())
     seen = []
