@@ -1,3 +1,4 @@
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QScrollArea
 
@@ -55,3 +56,10 @@ def test_dot_tile(qapp):
     assert (image.width(), image.height()) == (20, 20)
     assert image.pixelColor(0, 0) == QColor(CANVAS_DOT)
     assert image.pixelColor(10, 10) == QColor(CANVAS_BG)
+
+
+def test_overlays_transparent_to_mouse_events(qapp):
+    area = CanvasArea(QScrollArea())
+    assert area.hint_pill.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    assert area.brush_readout.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    assert not area.zoom_pill.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)

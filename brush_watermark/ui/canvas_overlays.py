@@ -1,6 +1,6 @@
 """Floating panels over the canvas: tool hints, zoom, brush readout."""
 
-from PySide6.QtCore import QSize, Signal
+from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -60,6 +60,7 @@ class FloatingPanel(QFrame):
 class HintPill(FloatingPanel):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFixedHeight(36)
         self.row.setContentsMargins(14, 0, 14, 0)
         self.row.setSpacing(10)
@@ -123,6 +124,7 @@ class ZoomPill(FloatingPanel):
 class BrushReadout(FloatingPanel):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFixedHeight(38)
         self.row.setContentsMargins(14, 0, 14, 0)
         self.row.setSpacing(12)
