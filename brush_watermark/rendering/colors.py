@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import Image, ImageStat
 
 LEGACY_COLORS = {
     "white": "#ffffff",
@@ -17,6 +17,22 @@ FIXED_SWATCH_RGB = (
 def rgb_to_hex(rgb: tuple[int, int, int]) -> str:
     r, g, b = rgb
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def sample_image_color(image: Image.Image, x: int, y: int, radius: int = 2) -> str:
+    """Average colour of the (2*radius+1)² box around (x, y), as ``#rrggbb``.
+
+    Averaging a small box instead of reading one pixel keeps the eyedropper
+    from landing on a single noisy or sharpened pixel. The box is clipped to
+    the image, so edge and corner picks work too.
+    """
+    width, height = image.size
+    x = min(max(int(x), 0), width - 1)
+    y = min(max(int(y), 0), height - 1)
+    box = (max(0, x - radius), max(0, y - radius), min(width, x + radius + 1), min(height, y + radius + 1))
+    region = image.crop(box).convert("RGB")
+    r, g, b = (int(round(channel)) for channel in ImageStat.Stat(region).mean)
+    return rgb_to_hex((r, g, b))
 
 
 def parse_rgb(color: str) -> tuple[int, int, int]:

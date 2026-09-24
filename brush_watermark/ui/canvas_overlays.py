@@ -39,6 +39,10 @@ TOOL_HINTS: dict[ToolMode, tuple[str, tuple[tuple[str, str], ...]]] = {
 }
 
 
+# Shown while picking a colour from the image (a one-shot mode, not a tool).
+PICK_COLOR_HINT = ("Pick colour", (("Click", "Sample colour"), ("Esc", "Cancel")))
+
+
 def tool_hint(tool: ToolMode) -> tuple[str, tuple[tuple[str, str], ...]]:
     return TOOL_HINTS[tool]
 
@@ -80,7 +84,9 @@ class HintPill(FloatingPanel):
         self._hints: list[QWidget] = []
 
     def set_tool(self, tool: ToolMode) -> None:
-        name, hints = tool_hint(tool)
+        self.set_hint(*tool_hint(tool))
+
+    def set_hint(self, name: str, hints: tuple[tuple[str, str], ...]) -> None:
         self.tool_label.setText(name)
         for widget in self._hints:
             widget.setParent(None)

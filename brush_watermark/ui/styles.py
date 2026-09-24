@@ -5,6 +5,8 @@ from brush_watermark.ui.design_tokens import (
     ACCENT_HOVER,
     ACCENT_TEXT,
     BORDER,
+    BORDER_DASHED,
+    BORDER_HOVER,
     BORDER_STRONG,
     CANVAS_BG,
     CHROME,
@@ -197,6 +199,17 @@ def app_stylesheet() -> str:
         min-height: 22px; max-height: 22px; min-width: 22px; max-width: 22px;
     }}
     QPushButton#Swatch:checked {{ border: 2px solid {ACCENT_BRIGHT}; }}
+    QPushButton#PickSwatch {{
+        background: transparent; border: 1px dashed {BORDER_DASHED}; border-radius: 6px; padding: 0;
+        min-height: 22px; max-height: 22px; min-width: 22px; max-width: 22px;
+    }}
+    QPushButton#PickSwatch:hover {{ border-color: {BORDER_HOVER}; }}
+    QPushButton#PickSwatch:checked {{ background: {accent_tint}; border: 2px solid {ACCENT_BRIGHT}; }}
+    QToolButton#AddTile {{
+        background: transparent; border: 1px dashed {BORDER_DASHED}; border-radius: 8px;
+        color: {TEXT_LABEL}; font-size: 11px; font-weight: 500;
+    }}
+    QToolButton#AddTile:hover {{ border-color: {BORDER_HOVER}; color: {TEXT}; }}
     QToolButton#RailButton {{ background: transparent; border: 1px solid transparent; border-radius: 10px; }}
     QToolButton#RailButton:hover {{ background: {SURFACE_RAISED}; }}
     QToolButton#RailButton:checked {{ background: {accent_tint}; border-color: {rgba(ACCENT_BRIGHT, 0.45)}; }}

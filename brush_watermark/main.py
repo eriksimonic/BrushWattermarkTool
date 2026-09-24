@@ -4,36 +4,17 @@ from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from brush_watermark.config import (
     APP_NAME,
     SUPPORTED_EXTENSIONS,
     app_icon_path,
-    last_image_dir,
     load_settings,
-    save_settings,
 )
 from brush_watermark.models import Settings
 from brush_watermark.ui.app_fonts import register_app_fonts, ui_font
-
-
-def select_jpg_files() -> list[Path]:
-    file_paths, _ = QFileDialog.getOpenFileNames(
-        None,
-        "Select JPG image(s)",
-        last_image_dir(),
-        "JPEG images (*.jpg *.jpeg);;All files (*.*)",
-    )
-    if not file_paths:
-        return []
-    paths = [Path(file_path) for file_path in file_paths]
-    invalid = [path for path in paths if path.suffix.lower() not in SUPPORTED_EXTENSIONS]
-    if invalid:
-        QMessageBox.critical(None, APP_NAME, "Only JPG and JPEG files are supported.")
-        return []
-    save_settings({"last_image_dir": str(paths[0].parent)})
-    return paths
+from brush_watermark.ui.file_dialogs import select_jpg_files
 
 
 def load_app_icon() -> QIcon:

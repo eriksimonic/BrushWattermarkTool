@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QScrollArea
 
 from brush_watermark.models import ToolMode
 from brush_watermark.ui.canvas import make_dot_tile
-from brush_watermark.ui.canvas_overlays import CanvasArea, tool_hint
+from brush_watermark.ui.canvas_overlays import PICK_COLOR_HINT, CanvasArea, tool_hint
 from brush_watermark.ui.design_tokens import CANVAS_BG, CANVAS_DOT
 
 
@@ -116,3 +116,9 @@ def test_overlays_transparent_to_mouse_events(qapp):
     assert area.hint_pill.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert area.brush_readout.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert not area.zoom_pill.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+
+def test_hint_pill_shows_a_custom_hint(qapp):
+    area = CanvasArea(QScrollArea())
+    area.hint_pill.set_hint(*PICK_COLOR_HINT)
+    assert area.hint_pill.tool_label.text() == "Pick colour"

@@ -53,3 +53,15 @@ def test_prev_next_buttons_emit(qapp):
     strip.prev_button.click()
     strip.next_button.click()
     assert seen == ["prev", "next"]
+
+
+def test_add_tile_sits_after_the_thumbnails_and_emits(qapp):
+    strip = make_strip(2)
+    seen = []
+    strip.addRequested.connect(lambda: seen.append(True))
+    strip.add_tile.click()
+    assert seen == [True]
+    layout = strip._layout
+    assert layout.indexOf(strip.add_tile) > max(layout.indexOf(item) for item in strip.items())
+    strip.set_thumbnails([strip.items()[0]._pixmap] * 4)
+    assert layout.indexOf(strip.add_tile) > max(layout.indexOf(item) for item in strip.items())

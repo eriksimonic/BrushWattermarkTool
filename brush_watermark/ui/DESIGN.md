@@ -26,6 +26,7 @@ All UI colours live in `design_tokens.py`; use tokens only, never hex literals (
 | `DIVIDER` | `#25272C` | Area separators, section dividers, ghost-button hover |
 | `KEY_BADGE_BORDER` | `#34373D` | Key badge border |
 | `SWITCH_OFF` | `#3A3D44` | Toggle switch track when off |
+| `BORDER_DASHED` | `#3A3D44` | Dashed borders of the "Pick from image" swatch and the filmstrip "Add" tile |
 | `TEXT` | `#ECEDEF` | Primary text and values |
 | `TEXT_BODY` | `#D5D7DB` | Switch labels |
 | `TEXT_SECONDARY` | `#B4B7BE` | Menu buttons, hints, readout |

@@ -344,3 +344,91 @@ def test_space_released_mid_pan_still_ends_as_a_pan(make_window):
     QTest.mouseRelease(window.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
     assert not window.canvas.is_panning
     assert window.line_start_xy is None and window.doc.strokes == []
+
+
+def _expected_pick(window):
+    # JPEG shifts the flat fixture colour slightly, so compare against the decoded pixels.
+    from brush_watermark.rendering.colors import sample_image_color
+
+    return sample_image_color(window.doc.original, 160, 100)
+
+
+def _image_center(window):
+    return window.image_to_canvas_xy(160, 100)
+
+
+def test_i_key_toggles_pick_mode(make_window):
+    window = make_window()
+    QTest.keyClick(window, Qt.Key.Key_I)
+    assert window.color_pick_active
+    assert window.inspector.color_picker.pick_button.isChecked()
+    assert window.canvas_area.hint_pill.tool_label.text() == "Pick colour"
+    assert window.canvas.cursor().shape() == Qt.CursorShape.CrossCursor
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    assert not window.color_pick_active
+    assert window.canvas_area.hint_pill.tool_label.text() == "Brush"
+
+
+def test_picking_sets_tool_default_colour_without_drawing(make_window):
+    window = make_window()
+    window.inspector.color_picker.pick_button.click()
+    assert window.color_pick_active
+    x, y = _image_center(window)
+    window.start_left_interaction(x, y)
+    window.finish_left_interaction(x, y)
+    assert not window.color_pick_active
+    assert window.inspector.color_picker.selected_color() == _expected_pick(window)
+    assert window.doc.settings.text_color == _expected_pick(window)
+    # The release belonged to the pick, not to the Brush tool.
+    assert window.line_start_xy is None and window.doc.strokes == []
+
+
+def test_picking_recolours_the_selected_layer(make_window):
+    window = make_window()
+    add_stroke(window)
+    window.select_stroke_by_index(0)
+    window.start_color_pick()
+    x, y = _image_center(window)
+    window.start_left_interaction(x, y)
+    window.finish_left_interaction(x, y)
+    assert window.doc.strokes[0].text_color == _expected_pick(window)
+
+
+def test_switching_tool_or_image_cancels_pick_mode(make_window):
+    window = make_window(2)
+    window.start_color_pick()
+    window.set_active_tool(ToolMode.PATH)
+    assert not window.color_pick_active
+    window.start_color_pick()
+    window.show_next_image()
+    assert not window.color_pick_active
+    assert not window.inspector.color_picker.pick_button.isChecked()
+
+
+def test_pick_wins_over_pan_tool(make_window):
+    window = make_window()
+    window.set_active_tool(ToolMode.PAN)
+    window.start_color_pick()
+    assert not window._should_pan()
+
+
+def test_add_images_appends_documents(make_window, tmp_path, monkeypatch):
+    from PIL import Image
+
+    window = make_window()
+    extra = tmp_path / "extra.jpg"
+    Image.new("RGB", (100, 80), (200, 10, 10)).save(extra)
+    monkeypatch.setattr(main_window, "select_jpg_files", lambda parent=None: [extra])
+    assert window.add_images_action.shortcut().toString() == "Ctrl+O"
+    window.add_images_action.trigger()
+    assert [doc.image_path.name for doc in window.docs] == ["img0.jpg", "extra.jpg"]
+    assert not window.filmstrip.isHidden()
+    window.filmstrip.add_tile.click()  # the same file again is ignored
+    assert len(window.docs) == 2
+
+
+def test_add_images_cancelled_changes_nothing(make_window, monkeypatch):
+    window = make_window()
+    monkeypatch.setattr(main_window, "select_jpg_files", lambda parent=None: [])
+    window.add_images()
+    assert len(window.docs) == 1

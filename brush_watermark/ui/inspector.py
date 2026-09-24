@@ -40,6 +40,7 @@ class InspectorPanel(QFrame):
     delete_all = Signal()
     guide_suppress_changed = Signal(bool)
     auto_place_requested = Signal(int)
+    pick_color_requested = Signal()
 
     def __init__(self, settings: Settings, swatch_colors: list[str]):
         super().__init__()
@@ -212,6 +213,7 @@ class InspectorPanel(QFrame):
         self.metadata_copy_edit.textChanged.connect(emit_document)
 
         self.color_picker.color_changed.connect(emit_controls)
+        self.color_picker.pick_requested.connect(self.pick_color_requested.emit)
         self.blend_combo.currentIndexChanged.connect(emit_controls)
         self.opacity_row.slider.valueChanged.connect(emit_controls)
         self.brush_row.slider.valueChanged.connect(emit_controls)

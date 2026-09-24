@@ -31,6 +31,7 @@ SHORTCUTS = (
     ("Z", "Zoom tool"),
     ("Space", "Hold to pan"),
     ("Alt+Click", "Zoom out (Zoom)"),
+    ("I", "Pick colour from image"),
     ("Wheel", "Strength"),
     ("Alt+Wheel", "Brush size"),
     ("Right-click", "Stop drawing (Brush)"),
@@ -39,6 +40,7 @@ SHORTCUTS = (
     ("Esc", "Cancel line / deselect anchor"),
     ("Ctrl+←/→", "Previous / next image"),
     ("Ctrl+S", "Save & close"),
+    ("Ctrl+O", "Add images"),
 )
 
 

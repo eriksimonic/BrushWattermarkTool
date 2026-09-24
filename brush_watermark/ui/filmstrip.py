@@ -2,7 +2,17 @@
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from brush_watermark.ui.app_fonts import mono_font
 from brush_watermark.ui.design_tokens import (
@@ -12,6 +22,7 @@ from brush_watermark.ui.design_tokens import (
     BORDER_HOVER,
     SHADOW,
     TEXT,
+    TEXT_LABEL,
     TEXT_SECONDARY,
     WARNING,
 )
@@ -116,6 +127,7 @@ class FilmstripWidget(QFrame):
     imageSelected = Signal(int)
     previousRequested = Signal()
     nextRequested = Signal()
+    addRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -169,6 +181,20 @@ class FilmstripWidget(QFrame):
         self._layout = QHBoxLayout(container)
         self._layout.setContentsMargins(4, 0, 4, 0)
         self._layout.setSpacing(10)
+        # Thumbnails are inserted before the Add tile; the stretch stays last.
+        self.add_tile = QToolButton()
+        self.add_tile.setObjectName("AddTile")
+        self.add_tile.setFixedSize(66, 66)
+        self.add_tile.setText("Add")
+        self.add_tile.setIcon(get_icon("plus", 16, TEXT_LABEL))
+        self.add_tile.setIconSize(QSize(16, 16))
+        self.add_tile.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.add_tile.setToolTip("Add images (Ctrl+O)")
+        self.add_tile.setAccessibleName("Add images")
+        self.add_tile.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_tile.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.add_tile.clicked.connect(lambda _checked=False: self.addRequested.emit())
+        self._layout.addWidget(self.add_tile, 0, Qt.AlignmentFlag.AlignVCenter)
         self._layout.addStretch(1)
         self._scroll.setWidget(container)
         row.addWidget(self._scroll, 1)

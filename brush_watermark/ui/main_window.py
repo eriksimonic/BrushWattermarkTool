@@ -27,7 +27,7 @@ from brush_watermark.geometry.curve import find_curve_segment_for_insert
 from brush_watermark.geometry.points import clamp, dist, find_anchor_index
 from brush_watermark.models import CanvasView, ToolMode
 from brush_watermark.rendering.blend import blend_mode_label
-from brush_watermark.rendering.colors import build_swatch_palette
+from brush_watermark.rendering.colors import build_swatch_palette, sample_image_color
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.adaptive_strength import opacity_for_path
 from brush_watermark.services.auto_update import can_auto_update
@@ -39,8 +39,9 @@ from brush_watermark.services.update_check import UpdateCheckResult
 from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
-from brush_watermark.ui.canvas_overlays import CanvasArea
+from brush_watermark.ui.canvas_overlays import PICK_COLOR_HINT, CanvasArea
 from brush_watermark.ui.design_tokens import TEXT
+from brush_watermark.ui.file_dialogs import select_jpg_files
 from brush_watermark.ui.filmstrip import THUMB_H, THUMB_W, FilmstripWidget
 from brush_watermark.ui.icons import get_pixmap
 from brush_watermark.ui.inspector import INSPECTOR_WIDTH, InspectorPanel
@@ -84,6 +85,10 @@ class MainWindow(QMainWindow):
         # that viewport point after the next zoom change.
         self._pending_zoom_anchor: Optional[tuple[float, float, float, float]] = None
         self._space_held = False
+        self.color_pick_active = False
+        # The press that sampled a colour also owns its move/release, so the
+        # active tool never sees half a click.
+        self._swallow_left_drag = False
         self.suppress_guides = False
         self._wheel_guide_timer = QTimer(self)
         self._wheel_guide_timer.setSingleShot(True)
@@ -156,6 +161,13 @@ class MainWindow(QMainWindow):
 
     def _build_menu_bar(self):
         file_menu = self.top_bar.add_menu("&File")
+
+        self.add_images_action = QAction("Add Images…", self)
+        self.add_images_action.setShortcut(QKeySequence("Ctrl+O"))
+        self.add_images_action.triggered.connect(lambda _checked=False: self.add_images())
+        file_menu.addAction(self.add_images_action)
+        self.addAction(self.add_images_action)
+        file_menu.addSeparator()
 
         # Actions with shortcuts are also added to the window so the keys work
         # while their menu is closed. Each key belongs to exactly one action.
@@ -283,6 +295,7 @@ class MainWindow(QMainWindow):
         ins.delete_all.connect(self.clear_all)
         ins.guide_suppress_changed.connect(self.set_guide_suppressed)
         ins.auto_place_requested.connect(self.start_auto_watermark)
+        ins.pick_color_requested.connect(self.toggle_color_pick)
         self.top_bar.save_and_close.connect(self.save_and_close)
         self.top_bar.save_copy_and_close.connect(self.save_copy_and_close)
         self.top_bar.save_all_and_close.connect(self.save_all_and_close)
@@ -298,6 +311,7 @@ class MainWindow(QMainWindow):
         self.filmstrip.imageSelected.connect(self.switch_active_document)
         self.filmstrip.previousRequested.connect(self.show_previous_image)
         self.filmstrip.nextRequested.connect(self.show_next_image)
+        self.filmstrip.addRequested.connect(self.add_images)
 
     def _start_update_check(self):
         self.footer.set_version_info(__version__)
@@ -594,7 +608,8 @@ class MainWindow(QMainWindow):
     # --- Panning (Pan tool, or Space held in any tool) ---
 
     def _should_pan(self) -> bool:
-        return self._space_held or self.active_tool == ToolMode.PAN
+        # A pending colour pick takes the click, even with the Pan tool active.
+        return self._space_held or (self.active_tool == ToolMode.PAN and not self.color_pick_active)
 
     def _pan_by(self, dx: float, dy: float) -> None:
         h_bar = self.canvas_scroll.horizontalScrollBar()
@@ -612,10 +627,44 @@ class MainWindow(QMainWindow):
             self.canvas.setCursor(Qt.CursorShape.ClosedHandCursor)
         elif self._should_pan():
             self.canvas.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif self.color_pick_active:
+            self.canvas.setCursor(Qt.CursorShape.CrossCursor)
         elif self.active_tool == ToolMode.ZOOM:
             self.canvas.setCursor(QCursor(get_pixmap("zoom-in", 20, TEXT), 9, 9))
         else:
             self.canvas.unsetCursor()
+
+    # --- Pick colour from image (I, or the dashed swatch) ---
+
+    def toggle_color_pick(self) -> None:
+        if self.color_pick_active:
+            self.cancel_color_pick()
+        else:
+            self.start_color_pick()
+
+    def start_color_pick(self) -> None:
+        self.color_pick_active = True
+        self.inspector.color_picker.set_picking(True)
+        self.canvas_area.hint_pill.set_hint(*PICK_COLOR_HINT)
+        self.canvas_area.refresh_overlays()
+        self._update_canvas_cursor()
+
+    def cancel_color_pick(self) -> None:
+        if not self.color_pick_active:
+            return
+        self.color_pick_active = False
+        self.inspector.color_picker.set_picking(False)
+        self.canvas_area.hint_pill.set_tool(self.active_tool)
+        self.canvas_area.refresh_overlays()
+        self._update_canvas_cursor()
+
+    def _pick_color_at(self, canvas_x: float, canvas_y: float) -> None:
+        img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
+        color = sample_image_color(self.doc.original, img_x, img_y)
+        self.cancel_color_pick()
+        # Emits color_changed → stroke_controls_changed, which applies it to the
+        # selected layer or the tool defaults like any swatch click.
+        self.inspector.color_picker.select_picked(color)
 
     def eventFilter(self, obj, event):
         etype = event.type()
@@ -653,6 +702,7 @@ class MainWindow(QMainWindow):
             return
         self._commit_inspector_settings()
 
+        self.cancel_color_pick()
         self.active_index = index
         self.snap_endpoint = None
         self.line_start_xy = None
@@ -795,6 +845,7 @@ class MainWindow(QMainWindow):
 
     def set_active_tool(self, tool) -> None:
         self.active_tool = ToolMode(tool) if not isinstance(tool, ToolMode) else tool
+        self.cancel_color_pick()
         self.snap_endpoint = None
         self._line_stopped = False
         self.is_erasing = False
@@ -824,8 +875,12 @@ class MainWindow(QMainWindow):
             self.set_active_tool(ToolMode.PAN)
         elif key == Qt.Key.Key_Z:
             self.set_active_tool(ToolMode.ZOOM)
+        elif key == Qt.Key.Key_I:
+            self.toggle_color_pick()
         elif key == Qt.Key.Key_Escape:
-            if self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
+            if self.color_pick_active:
+                self.cancel_color_pick()
+            elif self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
                 self.line_start_xy = None
                 self.canvas.update()
             elif self.active_tool == ToolMode.PATH and self.selected_anchor_index >= 0:
@@ -847,6 +902,11 @@ class MainWindow(QMainWindow):
 
     def start_left_interaction(self, canvas_x: float, canvas_y: float):
         # Pan presses never get here (CanvasWidget handles them via should_pan).
+        if self.color_pick_active:
+            if self.inside_image_canvas(canvas_x, canvas_y):
+                self._pick_color_at(canvas_x, canvas_y)
+                self._swallow_left_drag = True
+            return
         if self.active_tool == ToolMode.ZOOM:
             self._zoom_click(canvas_x, canvas_y)
             return
@@ -865,7 +925,7 @@ class MainWindow(QMainWindow):
             self._path_press(img_x, img_y)
 
     def continue_left_interaction(self, canvas_x: float, canvas_y: float):
-        if self.active_tool in (ToolMode.POINTER, ToolMode.PAN, ToolMode.ZOOM):
+        if self._swallow_left_drag or self.active_tool in (ToolMode.POINTER, ToolMode.PAN, ToolMode.ZOOM):
             return
         if not self.inside_image_canvas(canvas_x, canvas_y):
             return
@@ -877,7 +937,10 @@ class MainWindow(QMainWindow):
             self._path_move(canvas_x, canvas_y)
 
     def finish_left_interaction(self, canvas_x: float, canvas_y: float):
-        if self.active_tool in (ToolMode.PAN, ToolMode.ZOOM):
+        if self._swallow_left_drag:
+            self._swallow_left_drag = False
+            return
+        if self.color_pick_active or self.active_tool in (ToolMode.PAN, ToolMode.ZOOM):
             return
         if self.active_tool == ToolMode.POINTER:
             self._pointer_release(canvas_x, canvas_y)
@@ -1176,6 +1239,12 @@ class MainWindow(QMainWindow):
         if self.inspector.reveal_in_explorer_check.isChecked():
             reveal_in_explorer(export_path)
         return True
+
+    def add_images(self) -> None:
+        """File > Add Images / the filmstrip Add tile: pick more JPGs to open."""
+        paths = select_jpg_files(self)
+        if paths:
+            self.add_documents(paths)
 
     def add_documents(self, paths: list[Path]) -> None:
         """Append images handed over by a sibling launch (see launch_collector).
