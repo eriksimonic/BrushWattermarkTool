@@ -111,11 +111,11 @@ A modern dark editor — see [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui
 - **Tool rail** — Select (V), Brush (B), Path (A), Eraser (E), **Auto-place watermarks**, and a keyboard-shortcuts popup
 - **Canvas** — floating hints for the current tool, **Fit / 1:1** zoom with the current zoom %, and a readout of the brush colour, size, strength and blend mode
 - **Inspector**
-  - **Watermark** — text, font (its size follows the brush), auto-fit, and repeat along stroke with a gap
+  - **Watermark** — text, font (its size follows the brush), auto-fit, repeat along stroke with a gap, and the **Visible metadata strip** switch (camera, lens, settings, serial and copyright under the photo) with its extra copy text
   - **Brush** — colour, blend mode, strength (with **Auto** strength, which computes opacity from the underlying pixels), size and softness. These set **tool defaults** when nothing is selected, or edit the **selected layer** (the section title shows `Layer · …`)
   - **Auto watermark** — density and **Auto-place**
   - **Layers** — each stroke with an eye toggle to hide it; **Delete** or **Clear all**
-  - **Export** — visible metadata strip, extra copy text, and **Show in Explorer after save**
+  - **Export** — **Show in Explorer after save**
 - **Filmstrip** — with several images, numbered thumbnails with an unsaved marker
 - **Footer** — common shortcuts, and the version with update status (an **Update to vX** button appears when a new release is available)
 

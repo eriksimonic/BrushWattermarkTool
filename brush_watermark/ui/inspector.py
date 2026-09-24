@@ -88,6 +88,17 @@ class InspectorPanel(QFrame):
         watermark.body_layout.addLayout(font_row)
         watermark.body_layout.addWidget(self.auto_fit_check)
         watermark.body_layout.addLayout(repeat_row)
+        # The camera/settings strip is kept in the always-open Watermark section
+        # so it's visible without expanding Export.
+        self.add_metadata_check = SwitchRow("Visible metadata strip", settings.add_visible_metadata)
+        self.add_metadata_check.setToolTip(
+            "Expand the saved copy with camera, lens, settings, serial, and copy info at the bottom."
+        )
+        self.metadata_copy_edit = QLineEdit(settings.metadata_copy_text)
+        self.metadata_copy_edit.setPlaceholderText("Additional copy info (optional)")
+        self.metadata_copy_edit.setAccessibleName("Additional copy info")
+        watermark.body_layout.addWidget(self.add_metadata_check)
+        watermark.body_layout.addWidget(self.metadata_copy_edit)
         layout.addWidget(watermark)
 
         self.brush_section = CollapsibleSection("Brush", icon_name="paintbrush")
@@ -161,16 +172,7 @@ class InspectorPanel(QFrame):
         layout.addWidget(self.layers_section)
 
         export = CollapsibleSection("Export", icon_name="image", expanded=False)
-        self.add_metadata_check = SwitchRow("Visible metadata strip", settings.add_visible_metadata)
-        self.add_metadata_check.setToolTip(
-            "Expand the saved copy with camera, lens, settings, serial, and copy info at the bottom."
-        )
-        self.metadata_copy_edit = QLineEdit(settings.metadata_copy_text)
-        self.metadata_copy_edit.setPlaceholderText("Additional copy info (optional)")
-        self.metadata_copy_edit.setAccessibleName("Additional copy info")
         self.reveal_in_explorer_check = SwitchRow("Show in Explorer after save", True)
-        export.body_layout.addWidget(self.add_metadata_check)
-        export.body_layout.addWidget(self.metadata_copy_edit)
         export.body_layout.addWidget(self.reveal_in_explorer_check)
         layout.addWidget(export)
 
@@ -197,6 +199,7 @@ class InspectorPanel(QFrame):
         self.auto_strength_check.toggled.connect(emit_document)
         self.auto_strength_check.toggled.connect(self._update_opacity_enabled)
         self.add_metadata_check.toggled.connect(emit_document)
+        self.add_metadata_check.toggled.connect(self._update_metadata_copy_visible)
         self.metadata_copy_edit.textChanged.connect(emit_document)
 
         self.color_picker.color_changed.connect(emit_controls)
@@ -224,8 +227,12 @@ class InspectorPanel(QFrame):
         self.delete_all_btn.clicked.connect(lambda _checked=False: self.delete_all.emit())
         self._update_repeat_spacing_enabled()
         self._update_opacity_enabled()
+        self._update_metadata_copy_visible()
 
     # ---- state ---------------------------------------------------------
+
+    def _update_metadata_copy_visible(self, *_):
+        self.metadata_copy_edit.setVisible(self.add_metadata_check.isChecked())
 
     def _update_repeat_spacing_enabled(self, *_):
         self.repeat_spacing_spin.setEnabled(self.repeat_text_check.isChecked())

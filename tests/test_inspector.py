@@ -92,3 +92,26 @@ def test_width_leaves_room_for_the_scrollbar(qapp):
 
 def test_reveal_in_explorer_defaults_on(qapp):
     assert make_panel().reveal_in_explorer_check.isChecked() is True
+
+
+def _section_title(widget) -> str:
+    from brush_watermark.ui.controls import CollapsibleSection
+
+    parent = widget.parentWidget()
+    while parent is not None and not isinstance(parent, CollapsibleSection):
+        parent = parent.parentWidget()
+    return parent._title_label.text() if parent is not None else ""
+
+
+def test_metadata_strip_switch_lives_in_the_always_open_watermark_section(qapp):
+    panel = make_panel()
+    assert _section_title(panel.add_metadata_check) == "Watermark"
+    assert _section_title(panel.metadata_copy_edit) == "Watermark"
+
+
+def test_copy_info_field_only_shows_while_strip_is_on(qapp):
+    panel = make_panel()
+    panel.add_metadata_check.setChecked(False)
+    assert panel.metadata_copy_edit.isHidden()
+    panel.add_metadata_check.setChecked(True)
+    assert not panel.metadata_copy_edit.isHidden()
