@@ -1,4 +1,5 @@
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
+import dataclasses
 import math
 
 from brush_watermark.geometry.path_text import (
@@ -21,7 +22,7 @@ from brush_watermark.rendering.fonts import (
     font_size_from_brush,
     load_font,
 )
-from brush_watermark.rendering.masks import apply_erase_mask, make_stroke_mask
+from brush_watermark.rendering.masks import make_stroke_mask
 
 TEXT_BASELINE_ANCHOR = "ms"
 TANGENT_SMOOTHING = 0.35
@@ -142,15 +143,8 @@ def compute_text_span(
     )
 
 
-def draw_glyph_on_path(
-    layer: Image.Image,
-    glyph: Image.Image,
-    anchor_x: float,
-    anchor_y: float,
-    x: float,
-    y: float,
-    angle_degrees: float,
-) -> None:
+def _pad_glyph(glyph: Image.Image, anchor_x: float, anchor_y: float) -> Image.Image:
+    """Centre the glyph's baseline anchor on a square canvas so rotation pivots on it."""
     half = int(
         math.ceil(
             max(
@@ -165,10 +159,40 @@ def draw_glyph_on_path(
     paste_x = half - int(round(anchor_x))
     paste_y = half - int(round(anchor_y))
     canvas.paste(glyph, (paste_x, paste_y))
-    rotated = canvas.rotate(angle_degrees, expand=True, resample=Image.Resampling.BICUBIC)
+    return canvas
+
+
+def _rotate_padded(canvas: Image.Image, angle_degrees: float) -> Image.Image:
+    return canvas.rotate(angle_degrees, expand=True, resample=Image.Resampling.BICUBIC)
+
+
+def _composite_rotated(
+    layer: Image.Image,
+    rotated: Image.Image,
+    x: float,
+    y: float,
+    origin: tuple[int, int] = (0, 0),
+) -> None:
     rcx = rotated.size[0] / 2.0
     rcy = rotated.size[1] / 2.0
-    layer.alpha_composite(rotated, (int(round(x - rcx)), int(round(y - rcy))))
+    # Round in canvas coordinates before shifting by the integer origin, so a
+    # layer rendered at an offset lands on exactly the same pixels.
+    dest_x = int(round(x - rcx)) - origin[0]
+    dest_y = int(round(y - rcy)) - origin[1]
+    layer.alpha_composite(rotated, (dest_x, dest_y))
+
+
+def draw_glyph_on_path(
+    layer: Image.Image,
+    glyph: Image.Image,
+    anchor_x: float,
+    anchor_y: float,
+    x: float,
+    y: float,
+    angle_degrees: float,
+) -> None:
+    rotated = _rotate_padded(_pad_glyph(glyph, anchor_x, anchor_y), angle_degrees)
+    _composite_rotated(layer, rotated, x, y)
 
 
 def _draw_glyphs_on_path(
@@ -185,16 +209,21 @@ def _draw_glyphs_on_path(
     descent: float,
     repeat_gap: float = 0.0,
     prev_tangent: float | None = None,
+    origin: tuple[int, int] = (0, 0),
 ) -> None:
     avg_advance = sum(g[1] for g in glyphs) / len(glyphs)
     sampler = PathSampler(points)
+    # Repeated text re-draws the same letters, often at the same angle along
+    # straight runs: pad each glyph once and reuse identical rotations.
+    padded = [_pad_glyph(glyph, anchor_x, anchor_y) for glyph, _, anchor_x, anchor_y in glyphs]
+    rotated_cache: dict[tuple[int, float], Image.Image] = {}
     pos = start_d
     while pos < end_d:
         if repeat and pos > start_d and repeat_gap > 0:
             if pos + repeat_gap > end_d:
                 return
             pos += repeat_gap
-        for glyph, advance, anchor_x, anchor_y in glyphs:
+        for glyph_index, (_glyph, advance, _anchor_x, _anchor_y) in enumerate(glyphs):
             if pos + advance > end_d:
                 return
             center_d = pos + advance / 2.0
@@ -215,9 +244,12 @@ def _draw_glyphs_on_path(
             prev_tangent = tangent
             angle_degrees = glyph_rotation_degrees(tangent, angle_offset)
             ox, oy = centered_baseline_offset(tangent, ascent, descent)
-            draw_glyph_on_path(
-                layer, glyph, anchor_x, anchor_y, x + ox, y + oy, angle_degrees
-            )
+            key = (glyph_index, angle_degrees)
+            rotated = rotated_cache.get(key)
+            if rotated is None:
+                rotated = _rotate_padded(padded[glyph_index], angle_degrees)
+                rotated_cache[key] = rotated
+            _composite_rotated(layer, rotated, x + ox, y + oy, origin)
             pos += advance + gap_extra
         if not repeat:
             break
@@ -227,7 +259,9 @@ def draw_text_on_path(
     layer: Image.Image,
     stroke: Stroke,
     settings: Settings,
+    origin: tuple[int, int] = (0, 0),
 ) -> None:
+    """Draw the stroke's text into layer, whose top-left sits at origin in canvas coordinates."""
     if not stroke.visible:
         return
     raw_points = stroke.points
@@ -272,7 +306,87 @@ def draw_text_on_path(
         ascent=float(ascent),
         descent=float(descent),
         repeat_gap=repeat_gap,
+        origin=origin,
     )
+
+
+def _blur_support(radius: float) -> int:
+    """Pixels a GaussianBlur of this radius can spread a value, with slack."""
+    return int(math.ceil(radius * 4)) + 4
+
+
+def stroke_render_box(width: int, height: int, stroke: Stroke) -> tuple[int, int, int, int] | None:
+    """Canvas region that can hold any of the stroke's pixels (its blurred mask), or None."""
+    points = stroke.points
+    if not points:
+        return None
+    margin = stroke.brush_size // 2 + 2 + _blur_support(stroke.mask_softness)
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    x0 = max(0, int(math.floor(min(xs))) - margin)
+    y0 = max(0, int(math.floor(min(ys))) - margin)
+    x1 = min(width, int(math.ceil(max(xs))) + margin + 1)
+    y1 = min(height, int(math.ceil(max(ys))) + margin + 1)
+    if x0 >= x1 or y0 >= y1:
+        return None
+    return x0, y0, x1, y1
+
+
+def _erase_blur_region(
+    erase_mask: Image.Image,
+    size: tuple[int, int],
+    box: tuple[int, int, int, int],
+    mask_softness: int,
+    scale_factor: float,
+) -> Image.Image | None:
+    """The blurred erase mask cropped to box, matching a full-canvas blur."""
+    if not erase_mask.getbbox():
+        return None
+    if abs(scale_factor - 1.0) >= 0.0001:
+        erase_mask = erase_mask.resize(size, Image.Resampling.BILINEAR)
+    radius = max(0, int(mask_softness * scale_factor))
+    # Blur a margin around the box too: erased pixels just outside it still
+    # bleed in, exactly as they would when blurring the whole canvas.
+    pad = _blur_support(radius)
+    x0, y0, x1, y1 = box
+    outer = (max(0, x0 - pad), max(0, y0 - pad), min(size[0], x1 + pad), min(size[1], y1 + pad))
+    blurred = erase_mask.crop(outer).filter(ImageFilter.GaussianBlur(radius=radius))
+    return blurred.crop((x0 - outer[0], y0 - outer[1], x1 - outer[0], y1 - outer[1]))
+
+
+def render_stroke_layer(
+    width: int,
+    height: int,
+    stroke: Stroke,
+    settings: Settings,
+    erase_mask: Image.Image,
+    scale_factor: float = 1.0,
+) -> tuple[Image.Image | None, tuple[int, int, int, int] | None]:
+    """Render a stroke's masked text layer, cropped to its visible pixels.
+
+    Only the stroke's bounding region is drawn, masked and blurred, so cost
+    scales with the stroke's size rather than the canvas. Returns
+    ``(layer_crop, box)``, or ``(None, None)`` when nothing is visible.
+    """
+    region = stroke_render_box(width, height, stroke)
+    if region is None:
+        return None, None
+    x0, y0, x1, y1 = region
+    size = (x1 - x0, y1 - y0)
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw_text_on_path(layer, stroke, settings, origin=(x0, y0))
+    local = dataclasses.replace(stroke, points=[(x - x0, y - y0) for x, y in stroke.points])
+    stroke_mask = make_stroke_mask(size[0], size[1], [local], stroke.mask_softness, stroke.brush_size)
+    erase_blur = _erase_blur_region(erase_mask, (width, height), region, stroke.mask_softness, scale_factor)
+    if erase_blur is not None:
+        stroke_mask = Image.composite(Image.new("L", size, 0), stroke_mask, erase_blur)
+    alpha_channel = Image.composite(layer.getchannel("A"), Image.new("L", size, 0), stroke_mask)
+    layer.putalpha(alpha_channel)
+    bbox = layer.getbbox()
+    if bbox is None:
+        return None, None
+    box = (x0 + bbox[0], y0 + bbox[1], x0 + bbox[2], y0 + bbox[3])
+    return layer.crop(bbox), box
 
 
 def make_stroke_watermark_layer(
@@ -284,35 +398,32 @@ def make_stroke_watermark_layer(
     scale_factor: float = 1.0,
 ) -> Image.Image:
     layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw_text_on_path(layer, stroke, settings)
-    stroke_mask = make_stroke_mask(
-        width, height, [stroke], stroke.mask_softness, stroke.brush_size
-    )
-    stroke_mask = apply_erase_mask(stroke_mask, erase_mask, stroke.mask_softness, scale_factor)
-    alpha_channel = layer.getchannel("A")
-    alpha_channel = Image.composite(
-        alpha_channel, Image.new("L", alpha_channel.size, 0), stroke_mask
-    )
-    layer.putalpha(alpha_channel)
+    layer_crop, box = render_stroke_layer(width, height, stroke, settings, erase_mask, scale_factor)
+    if layer_crop is not None:
+        layer.paste(layer_crop, box)
     return layer
 
 
 def composite_strokes_onto(base: Image.Image, strokes: list[Stroke], settings: Settings, erase_mask: Image.Image, scale_factor: float = 1.0) -> Image.Image:
+    """Blend each stroke onto base, touching only the stroke's own region."""
     result = base.convert("RGBA")
     for stroke in strokes:
         if not stroke.visible:
             continue
-        stroke_layer = make_stroke_watermark_layer(
+        layer_crop, box = render_stroke_layer(
             result.size[0], result.size[1], stroke, settings, erase_mask, scale_factor
         )
+        if layer_crop is None:
+            continue
         strength = clamp(stroke.opacity, 1, 100) / 100.0
-        result = composite_watermark_layer(
-            result,
-            stroke_layer,
+        blended = composite_watermark_layer(
+            result.crop(box),
+            layer_crop,
             stroke.text_color,
             normalize_blend_mode(stroke.blend_mode, settings.blend_mode),
             strength,
         )
+        result.paste(blended, box)
     return result
 
 

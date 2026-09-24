@@ -20,7 +20,7 @@ from brush_watermark.geometry.points import (
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import blend_mode_label, composite_watermark_layer, normalize_blend_mode
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
-from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_stroke_watermark_layer
+from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, render_stroke_layer
 from brush_watermark.services.exif_metadata import read_exif_bytes, read_image_metadata
 
 
@@ -197,11 +197,9 @@ class Document:
             sig = self._stroke_layer_signature(stroke, display_w, display_h)
             cached = self._layer_cache.get(sig)
             if cached is None:
-                layer = make_stroke_watermark_layer(
+                cached = render_stroke_layer(
                     display_w, display_h, stroke, self.settings, self.erase_mask, scale_factor
                 )
-                box = layer.getbbox()
-                cached = (layer.crop(box), box) if box is not None else (None, None)
             new_cache[sig] = cached
             layer_crop, box = cached
             if layer_crop is None:
