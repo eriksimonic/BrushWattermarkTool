@@ -1,7 +1,7 @@
 """Top bar: logo and menus, active file info, Original/Watermarked toggle, save actions."""
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QSizePolicy, QWidget
 
 from brush_watermark.ui.controls import SegmentedControl, SplitButton, make_menu
 from brush_watermark.ui.design_tokens import ON_ACCENT, TEXT, TEXT_MUTED, TEXT_SECONDARY
@@ -54,8 +54,10 @@ class TopBar(QFrame):
         self.serial_chip = QLabel()
         self.serial_chip.setObjectName("SerialChip")
         self.serial_chip.setToolTip("Image serial")
+        self.serial_chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.index_badge = QLabel()
         self.index_badge.setObjectName("CountBadge")
+        self.index_badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.unsaved_indicator = QWidget()
         unsaved_row = QHBoxLayout(self.unsaved_indicator)
         unsaved_row.setContentsMargins(0, 0, 0, 0)
@@ -71,14 +73,14 @@ class TopBar(QFrame):
         info = QHBoxLayout()
         info.setSpacing(8)
         for widget in (file_icon, self.file_name_label, self.serial_chip, self.index_badge, self.unsaved_indicator):
-            info.addWidget(widget)
+            info.addWidget(widget, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addLayout(info)
 
         row.addStretch(1)
         self.preview_toggle = SegmentedControl(["Original", "Watermarked"])
         self.preview_toggle.setCurrentIndex(1)
         self.preview_toggle.setAccessibleName("Preview")
-        row.addWidget(self.preview_toggle)
+        row.addWidget(self.preview_toggle, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addStretch(1)
 
         self.exit_button = QPushButton("Exit")

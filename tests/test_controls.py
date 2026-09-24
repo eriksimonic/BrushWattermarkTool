@@ -1,11 +1,12 @@
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from brush_watermark.ui.controls import (
     AccentSlider,
     Chip,
     CollapsibleSection,
+    KeyBadge,
     KeyCombo,
     SegmentedControl,
     SliderRow,
@@ -107,3 +108,24 @@ def test_split_button_main_click_emits(qapp):
 def test_key_combo_splits_on_plus(qapp):
     combo = KeyCombo("Alt+Wheel")
     assert [label.text() for label in combo.findChildren(QLabel)] == ["Alt", "+", "Wheel"]
+
+
+def test_key_badge_stays_compact_in_a_tall_row(qapp):
+    host = QWidget()
+    host.setFixedHeight(60)
+    layout = QHBoxLayout(host)
+    combo = KeyCombo("Alt+Wheel")
+    layout.addWidget(combo)
+    host.show()
+    for badge in combo.findChildren(KeyBadge):
+        assert badge.height() <= 24
+
+
+def test_segmented_control_stays_compact_in_a_tall_row(qapp):
+    host = QWidget()
+    host.setFixedHeight(52)
+    layout = QHBoxLayout(host)
+    control = SegmentedControl(["Original", "Watermarked"])
+    layout.addWidget(control)
+    host.show()
+    assert control.height() <= 36

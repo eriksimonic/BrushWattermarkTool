@@ -59,6 +59,7 @@ def app_stylesheet() -> str:
     QScrollArea#FilmstripScroll, QScrollArea#FilmstripScroll > QWidget#qt_scrollarea_viewport {{
         background: transparent; border: none;
     }}
+    QWidget#FilmstripItems {{ background: transparent; }}
     QScrollArea#CanvasScrollArea, QScrollArea#CanvasScrollArea > QWidget#qt_scrollarea_viewport {{
         background: {CANVAS_BG}; border: none;
     }}

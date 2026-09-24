@@ -6,7 +6,17 @@ bar, tool rail, canvas overlays and footer instead.
 """
 
 from PySide6.QtCore import QSize, Signal
-from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from brush_watermark.models import Settings, Stroke
 from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
@@ -132,6 +142,7 @@ class InspectorPanel(QFrame):
         self.layers_section = CollapsibleSection("Layers", icon_name="layers")
         self.layer_count_badge = QLabel("0")
         self.layer_count_badge.setObjectName("CountBadge")
+        self.layer_count_badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.layers_section.add_header_widget(self.layer_count_badge)
         self.layer_list = LayerList()
         self.delete_selected_btn = QPushButton("Delete")

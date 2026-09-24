@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -244,6 +245,8 @@ class SegmentedControl(QFrame):
     def __init__(self, labels: list[str], parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("SegmentedControl")
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(34)
         row = QHBoxLayout(self)
         row.setContentsMargins(3, 3, 3, 3)
         row.setSpacing(2)
@@ -287,6 +290,7 @@ class KeyBadge(QLabel):
     def __init__(self, text: str, parent: QWidget | None = None):
         super().__init__(text, parent)
         self.setObjectName("KeyBadge")
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
 
 class KeyCombo(QWidget):
@@ -470,7 +474,9 @@ class CollapsibleSection(QFrame):
 
     def add_header_widget(self, widget: QWidget) -> None:
         """Insert a widget (e.g. a count badge) right after the title."""
-        self._header_row.insertWidget(self._header_row.indexOf(self._title_label) + 1, widget)
+        self._header_row.insertWidget(
+            self._header_row.indexOf(self._title_label) + 1, widget, 0, Qt.AlignmentFlag.AlignVCenter
+        )
 
     def is_expanded(self) -> bool:
         return self._expanded

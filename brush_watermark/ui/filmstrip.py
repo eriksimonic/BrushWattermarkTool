@@ -137,6 +137,7 @@ class FilmstripWidget(QFrame):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         container = QWidget()
+        container.setObjectName("FilmstripItems")
         self._layout = QHBoxLayout(container)
         self._layout.setContentsMargins(4, 0, 4, 0)
         self._layout.setSpacing(10)
