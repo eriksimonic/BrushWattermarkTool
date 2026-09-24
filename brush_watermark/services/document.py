@@ -18,7 +18,7 @@ from brush_watermark.geometry.points import (
     simplify_points,
 )
 from brush_watermark.models import Settings, Stroke
-from brush_watermark.rendering.blend import blend_mode_short, composite_watermark_layer, normalize_blend_mode
+from brush_watermark.rendering.blend import blend_mode_label, blend_mode_short, composite_watermark_layer, normalize_blend_mode
 from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_stroke_watermark_layer
@@ -73,6 +73,23 @@ class Document:
             f"{'repeat' if stroke.repeat_text else 'stretch'}"
             f"{f' +{stroke.repeat_spacing}' if stroke.repeat_text else ''}"
         )
+
+    def stroke_meta_text(self, stroke: Stroke) -> str:
+        """One-line layer summary for the inspector's layer list."""
+        length = int(path_length(stroke.points))
+        text = f"{length} px · {blend_mode_label(stroke.blend_mode)} · {stroke.opacity}%"
+        if stroke.repeat_text:
+            text += " · repeat"
+        return text
+
+    def set_stroke_visible(self, index: int, visible: bool) -> None:
+        if not 0 <= index < len(self.strokes):
+            return
+        stroke = self.strokes[index]
+        if stroke.visible == visible:
+            return
+        stroke.visible = visible
+        self.dirty = True
 
     def text_span_info(self, points: list[Point], brush_size: int):
         return compute_text_span(

@@ -224,3 +224,32 @@ class TestLoadDocuments:
         docs, errors = load_documents([path, tmp_path / "." / "a.jpg"], Settings())
         assert len(docs) == 1
         assert errors == []
+
+
+class TestStrokeVisibility:
+    def test_set_stroke_visible_marks_dirty_on_change(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.strokes.append(_stroke([(0, 0), (10, 0)]))
+        doc.dirty = False
+        doc.set_stroke_visible(0, False)
+        assert doc.strokes[0].visible is False and doc.dirty is True
+
+    def test_set_stroke_visible_no_change_keeps_clean(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.strokes.append(_stroke([(0, 0), (10, 0)]))
+        doc.dirty = False
+        doc.set_stroke_visible(0, True)
+        assert doc.dirty is False
+
+    def test_set_stroke_visible_ignores_bad_index(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        doc.set_stroke_visible(3, False)
+        assert doc.strokes == []
+
+    def test_stroke_meta_text(self, tmp_path):
+        doc = _make_doc(tmp_path)
+        stroke = _stroke([(0, 0), (100, 0)], opacity=19)
+        stroke.blend_mode = "soft_light"
+        assert doc.stroke_meta_text(stroke) == "100 px · Soft light · 19%"
+        stroke.repeat_text = True
+        assert doc.stroke_meta_text(stroke).endswith(" · repeat")
