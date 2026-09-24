@@ -571,6 +571,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} - {doc.image_path.name}")
         self.swatch_colors = build_swatch_palette(doc.original)
         self.inspector.set_swatches(self.swatch_colors, doc.settings.text_color)
+        self.inspector.load_document_settings(doc.settings)
         self._refresh_file_info()
         self.selected_anchor_index = -1
         self.anchor_drag_active = False

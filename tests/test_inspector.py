@@ -115,3 +115,17 @@ def test_copy_info_field_only_shows_while_strip_is_on(qapp):
     assert panel.metadata_copy_edit.isHidden()
     panel.add_metadata_check.setChecked(True)
     assert not panel.metadata_copy_edit.isHidden()
+
+
+def test_load_document_settings_shows_values_without_emitting(qapp):
+    panel = make_panel()
+    seen = []
+    panel.document_settings_changed.connect(lambda: seen.append(1))
+    panel.load_document_settings(
+        Settings(watermark_text="© B", add_visible_metadata=True, metadata_copy_text="x", auto_strength=True)
+    )
+    assert panel.watermark_text_edit.text() == "© B"
+    assert panel.add_metadata_check.isChecked() and not panel.metadata_copy_edit.isHidden()
+    assert panel.metadata_copy_edit.text() == "x"
+    assert not panel.opacity_row.slider.isEnabled()
+    assert seen == []

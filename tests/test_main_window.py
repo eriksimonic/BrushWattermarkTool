@@ -142,3 +142,19 @@ def test_unsaved_indicator_follows_dirty(make_window):
     window.doc.dirty = True
     window.schedule_preview(1)
     assert not window.top_bar.unsaved_indicator.isHidden()
+
+
+def test_switching_images_shows_each_images_own_document_settings(make_window):
+    window = make_window(2)
+    window.inspector.add_metadata_check.setChecked(True)
+    window.inspector.watermark_text_edit.setText("Only on image 1")
+    assert window.docs[0].settings.add_visible_metadata is True
+
+    window.switch_active_document(1)
+    assert window.inspector.add_metadata_check.isChecked() is False
+    assert window.inspector.watermark_text_edit.text() == window.docs[1].settings.watermark_text
+    assert window.docs[1].settings.add_visible_metadata is False
+
+    window.switch_active_document(0)
+    assert window.inspector.add_metadata_check.isChecked() is True
+    assert window.inspector.watermark_text_edit.text() == "Only on image 1"

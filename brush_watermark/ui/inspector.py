@@ -296,6 +296,30 @@ class InspectorPanel(QFrame):
         self._block_control_signals(False)
         self._update_repeat_spacing_enabled()
 
+    def load_document_settings(self, settings: Settings) -> None:
+        """Show one image's document-level settings (text, font, auto-fit, strength mode, strip)."""
+        widgets = (
+            self.watermark_text_edit,
+            self.font_combo,
+            self.auto_fit_check,
+            self.auto_strength_check,
+            self.add_metadata_check,
+            self.metadata_copy_edit,
+        )
+        for widget in widgets:
+            widget.blockSignals(True)
+        self.watermark_text_edit.setText(settings.watermark_text)
+        if self.font_combo.findText(settings.font_name) >= 0:
+            self.font_combo.setCurrentText(settings.font_name)
+        self.auto_fit_check.setChecked(settings.auto_fit_text)
+        self.auto_strength_check.setChecked(settings.auto_strength)
+        self.add_metadata_check.setChecked(settings.add_visible_metadata)
+        self.metadata_copy_edit.setText(settings.metadata_copy_text)
+        for widget in widgets:
+            widget.blockSignals(False)
+        self._update_opacity_enabled()
+        self._update_metadata_copy_visible()
+
     def load_tool_defaults(self, settings: Settings):
         self._load_control_values(settings)
         self.set_brush_context()
