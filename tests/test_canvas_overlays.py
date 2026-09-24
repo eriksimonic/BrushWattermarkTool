@@ -38,7 +38,50 @@ def test_zoom_pill_emits_mode(qapp):
     area.zoom_pill.fit_btn.click()
     assert seen == [True, False]
     area.zoom_pill.set_zoom_percent(62)
-    assert area.zoom_pill.percent_label.text() == "62%"
+    assert area.zoom_pill.percent_edit.text() == "62%"
+
+
+def test_zoom_pill_step_buttons_and_typed_percent(qapp):
+    area = CanvasArea(QScrollArea())
+    pill = area.zoom_pill
+    steps, typed = [], []
+    pill.zoom_step_requested.connect(steps.append)
+    pill.zoom_percent_entered.connect(typed.append)
+    pill.zoom_in_btn.click()
+    pill.zoom_out_btn.click()
+    assert steps == [1, -1]
+    pill.percent_edit.setText("150")
+    pill.percent_edit.editingFinished.emit()
+    assert typed == [1.5]
+
+
+def test_zoom_pill_rejects_garbage_and_restores_text(qapp):
+    area = CanvasArea(QScrollArea())
+    pill = area.zoom_pill
+    typed = []
+    pill.zoom_percent_entered.connect(typed.append)
+    pill.set_zoom_percent(62)
+    pill.percent_edit.setText("abc")
+    pill.percent_edit.editingFinished.emit()
+    assert typed == [] and pill.percent_edit.text() == "62%"
+
+
+def test_zoom_pill_state_can_check_neither_mode(qapp):
+    area = CanvasArea(QScrollArea())
+    pill = area.zoom_pill
+    pill.set_zoom_state(150, fit=False)
+    assert not pill.fit_btn.isChecked() and not pill.one_to_one_btn.isChecked()
+    pill.set_zoom_state(100, fit=False)
+    assert pill.one_to_one_btn.isChecked() and not pill.fit_btn.isChecked()
+    pill.set_zoom_state(62, fit=True)
+    assert pill.fit_btn.isChecked() and not pill.one_to_one_btn.isChecked()
+
+
+def test_clicking_checked_fit_keeps_it_checked(qapp):
+    area = CanvasArea(QScrollArea())
+    pill = area.zoom_pill
+    pill.fit_btn.click()
+    assert pill.fit_btn.isChecked()
 
 
 def test_brush_readout_values(qapp):

@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -56,6 +56,9 @@ class CanvasWidget(QWidget):
         text_span_info: Callable[[list, int], Optional[Any]],
         on_double_click: Callable[[float, float], None] = lambda x, y: None,
         preview_pixmap=None,
+        should_pan: Callable[[], bool] = lambda: False,
+        on_pan: Callable[[float, float], None] = lambda dx, dy: None,
+        on_pan_state: Callable[[bool], None] = lambda panning: None,
     ):
         super().__init__()
         self._get_view = get_view
@@ -73,6 +76,15 @@ class CanvasWidget(QWidget):
         self._text_span_info = text_span_info
         self._on_double_click = on_double_click
         self.preview_pixmap = preview_pixmap
+        # On-screen size of the preview; bigger than the pixmap above 100 % zoom,
+        # where the preview is rendered at 1:1 and scaled up when drawn.
+        self.preview_draw_size: Optional[tuple[int, int]] = None
+        self._should_pan = should_pan
+        self._on_pan = on_pan
+        self._on_pan_state = on_pan_state
+        # Pan vs. tool is decided once, at the left press, so releasing Space
+        # mid-drag still ends the drag as a pan.
+        self._pan_last: Optional[QPointF] = None
         self._background = QBrush(make_dot_tile())
 
         self.setMouseTracking(True)
@@ -87,7 +99,16 @@ class CanvasWidget(QWidget):
         p.fillRect(self.rect(), self._background)
 
         if self.preview_pixmap is not None:
-            p.drawPixmap(int(view.offset_x), int(view.offset_y), self.preview_pixmap)
+            pixmap = self.preview_pixmap
+            draw_w, draw_h = self.preview_draw_size or (pixmap.width(), pixmap.height())
+            if (draw_w, draw_h) == (pixmap.width(), pixmap.height()):
+                p.drawPixmap(int(view.offset_x), int(view.offset_y), pixmap)
+            else:
+                # Upscaled: keep pixels crisp rather than smoothing them.
+                p.setRenderHint(QPainter.SmoothPixmapTransform, False)
+                target = QRectF(int(view.offset_x), int(view.offset_y), draw_w, draw_h)
+                p.drawPixmap(target, pixmap, QRectF(pixmap.rect()))
+                p.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
         if not view.show_original:
             self._draw_overlay(p, view)
@@ -260,12 +281,26 @@ class CanvasWidget(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         x, y = event.position().x(), event.position().y()
+        if event.button() == Qt.LeftButton and self._should_pan():
+            # Treat the second click of a double-click as another pan press.
+            self._pan_last = event.globalPosition()
+            self._on_pan_state(True)
+            return
         if event.button() == Qt.LeftButton:
             self._on_double_click(x, y)
         self.update()
 
+    @property
+    def is_panning(self) -> bool:
+        return self._pan_last is not None
+
     def mousePressEvent(self, event: QMouseEvent):
         x, y = event.position().x(), event.position().y()
+        if event.button() == Qt.LeftButton and self._should_pan():
+            # Global coordinates: the widget itself moves while we scroll.
+            self._pan_last = event.globalPosition()
+            self._on_pan_state(True)
+            return
         if event.button() == Qt.LeftButton:
             self._on_left_press(x, y)
         elif event.button() == Qt.RightButton:
@@ -274,6 +309,12 @@ class CanvasWidget(QWidget):
 
     def mouseMoveEvent(self, event: QMouseEvent):
         x, y = event.position().x(), event.position().y()
+        if self._pan_last is not None:
+            pos = event.globalPosition()
+            delta = pos - self._pan_last
+            self._pan_last = pos
+            self._on_pan(delta.x(), delta.y())
+            return
         self._on_pointer_move(x, y)
         if event.buttons() & Qt.LeftButton:
             self._on_left_move(x, y)
@@ -283,6 +324,10 @@ class CanvasWidget(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         x, y = event.position().x(), event.position().y()
+        if event.button() == Qt.LeftButton and self._pan_last is not None:
+            self._pan_last = None
+            self._on_pan_state(False)
+            return
         if event.button() == Qt.LeftButton:
             self._on_left_release(x, y)
         elif event.button() == Qt.RightButton:

@@ -35,3 +35,15 @@ def test_shortcuts_list_starts_with_tools_and_includes_new_keys():
     keys = [k for k, _ in SHORTCUTS]
     assert keys[:4] == ["V", "B", "A", "E"]
     assert "Ctrl+S" in keys and "Ctrl+←/→" in keys
+    assert "H" in keys and "Z" in keys and "Space" in keys
+
+
+def test_rail_has_pan_and_zoom(qapp):
+    rail = ToolRail()
+    seen = []
+    rail.tool_changed.connect(seen.append)
+    rail.buttons[ToolMode.PAN].click()
+    rail.buttons[ToolMode.ZOOM].click()
+    assert seen == [ToolMode.PAN, ToolMode.ZOOM]
+    rail.set_active_tool(ToolMode.ZOOM)
+    assert [t for t, b in rail.buttons.items() if b.isChecked()] == [ToolMode.ZOOM]

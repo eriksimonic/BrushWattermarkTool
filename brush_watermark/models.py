@@ -14,6 +14,8 @@ class ToolMode(str, Enum):
     BRUSH = "brush"
     PATH = "path"
     ERASER = "eraser"
+    PAN = "pan"
+    ZOOM = "zoom"
 
 
 @dataclass

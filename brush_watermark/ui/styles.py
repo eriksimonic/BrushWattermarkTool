@@ -100,7 +100,12 @@ def app_stylesheet() -> str:
     }}
     QLabel#KeyBadge:disabled {{ color: {TEXT_MUTED}; }}
     QLabel#FooterText {{ color: {TEXT_LABEL}; font-size: 11px; }}
-    QLabel#ZoomPercent {{ font-family: '{mono}'; font-size: 12px; font-weight: 500; }}
+    QLineEdit#ZoomPercent {{
+        font-family: '{mono}'; font-size: 12px; font-weight: 500; background: transparent;
+        border: 1px solid transparent; border-radius: 6px; padding: 0 2px; min-height: 26px; max-height: 26px;
+    }}
+    QLineEdit#ZoomPercent:hover {{ border-color: {BORDER}; }}
+    QLineEdit#ZoomPercent:focus {{ background: {SURFACE_INPUT}; border-color: {ACCENT_BRIGHT}; }}
     QLabel#ReadoutText {{ font-family: '{mono}'; font-size: 12px; font-weight: 500; color: {TEXT_SECONDARY}; }}
     QLabel#ReadoutSlash {{ font-family: '{mono}'; font-size: 12px; color: {TEXT_FAINT}; }}
     QLabel#FilmstripTitle {{ font-size: 12px; font-weight: 600; }}

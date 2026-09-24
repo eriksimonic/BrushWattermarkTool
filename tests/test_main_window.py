@@ -1,13 +1,15 @@
 """Offscreen smoke tests for the redesigned MainWindow wiring."""
 import pytest
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QMenuBar
 
 from brush_watermark.models import Settings, Stroke, ToolMode
 from brush_watermark.rendering.fonts import font_size_from_brush
 from brush_watermark.services.document import load_documents
+import brush_watermark.ui.main_window as main_window
 from brush_watermark.ui.main_window import MainWindow
 
 
@@ -225,3 +227,120 @@ def test_delete_key_without_selection_does_nothing(make_window):
     window.select_stroke_by_index(-1)
     QTest.keyClick(window, Qt.Key.Key_Delete)
     assert len(window.doc.strokes) == 1
+
+
+def test_h_and_z_keys_pick_pan_and_zoom(make_window):
+    window = make_window()
+    QTest.keyClick(window, Qt.Key.Key_H)
+    assert window.active_tool == ToolMode.PAN
+    assert window.canvas.cursor().shape() == Qt.CursorShape.OpenHandCursor
+    QTest.keyClick(window, Qt.Key.Key_Z)
+    assert window.active_tool == ToolMode.ZOOM
+    assert window.canvas_area.hint_pill.tool_label.text() == "Zoom"
+
+
+def test_zoom_above_100_renders_at_1_to_1_and_scales_up(make_window):
+    window = make_window()
+    window.set_zoom(2.0)
+    assert window.scale == 2.0 and window.zoom_is_fit is False
+    assert (window.preview_pixmap.width(), window.preview_pixmap.height()) == (320, 200)
+    assert window.canvas.preview_draw_size == (640, 400)
+    assert window.canvas_area.zoom_pill.percent_edit.text() == "200%"
+
+
+def test_zoom_keeps_the_anchor_point_under_the_cursor(make_window):
+    window = make_window()
+    window.set_zoom(1.0)
+    viewport = window.canvas_scroll.viewport()
+    anchor = (viewport.width() / 2 + 40, viewport.height() / 2 + 30)
+    before = window.canvas_to_image_xy(anchor[0] - window.canvas.x(), anchor[1] - window.canvas.y())
+    window.set_zoom(4.0, anchor)
+    assert window.canvas_scroll.horizontalScrollBar().maximum() > 0
+    after = window.canvas_to_image_xy(anchor[0] - window.canvas.x(), anchor[1] - window.canvas.y())
+    # Only x: at 400 % the 200 px tall test image still fits vertically, so y can not scroll.
+    assert abs(after[0] - before[0]) <= 1
+
+
+def test_zoom_tool_click_zooms_in_and_alt_click_zooms_out(make_window, monkeypatch):
+    window = make_window()
+    window.set_active_tool(ToolMode.ZOOM)
+    window.set_zoom(1.0)
+    window.start_left_interaction(100, 100)
+    assert window.scale == 1.5
+    monkeypatch.setattr(
+        main_window.QApplication, "keyboardModifiers", staticmethod(lambda: Qt.KeyboardModifier.AltModifier)
+    )
+    window.start_left_interaction(100, 100)
+    assert window.scale == 1.0
+    assert window.doc.strokes == []
+
+
+def test_fit_button_returns_to_fit(make_window):
+    window = make_window()
+    window.set_zoom(3.0)
+    window.canvas_area.zoom_pill.fit_btn.click()
+    assert window.zoom_is_fit is True and window.scale <= 1.0
+    assert window.canvas_area.zoom_pill.fit_btn.isChecked()
+
+
+def test_pan_moves_the_scrollbars(make_window):
+    window = make_window()
+    window.set_zoom(4.0)
+    h_bar = window.canvas_scroll.horizontalScrollBar()
+    h_bar.setValue(100)
+    window._pan_by(30, 0)
+    assert h_bar.value() == 70
+
+
+def test_pan_tool_drag_pans_instead_of_drawing(make_window):
+    window = make_window()
+    window.set_zoom(4.0)
+    window.set_active_tool(ToolMode.PAN)
+    start = window.canvas.rect().center()
+    QTest.mousePress(window.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+    assert window.canvas.is_panning
+    assert window.canvas.cursor().shape() == Qt.CursorShape.ClosedHandCursor
+    end = start + QPoint(-50, 0)
+    QTest.mouseMove(window.canvas, end)
+    QTest.mouseRelease(window.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, end)
+    assert not window.canvas.is_panning
+    assert window.doc.strokes == []
+
+
+def _space(etype, auto_repeat=False):
+    return QKeyEvent(etype, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier, "", auto_repeat)
+
+
+def test_space_hold_pans_in_brush_tool(make_window, monkeypatch):
+    window = make_window()
+    monkeypatch.setattr(main_window.QApplication, "activeWindow", staticmethod(lambda: window))
+    monkeypatch.setattr(main_window.QApplication, "focusWidget", staticmethod(lambda: None))
+    assert window.eventFilter(window, _space(QEvent.Type.KeyPress)) is True
+    assert window._should_pan() and window.active_tool == ToolMode.BRUSH
+    # An auto-repeat release (Windows sends these while a key is held) keeps the hold.
+    assert window.eventFilter(window, _space(QEvent.Type.KeyRelease, auto_repeat=True)) is True
+    assert window._should_pan()
+    assert window.eventFilter(window, _space(QEvent.Type.KeyRelease)) is True
+    assert not window._should_pan()
+
+
+def test_space_is_left_alone_in_text_fields(make_window, monkeypatch):
+    window = make_window()
+    monkeypatch.setattr(main_window.QApplication, "activeWindow", staticmethod(lambda: window))
+    monkeypatch.setattr(
+        main_window.QApplication, "focusWidget", staticmethod(lambda: window.inspector.watermark_text_edit)
+    )
+    assert window.eventFilter(window, _space(QEvent.Type.KeyPress)) is False
+    assert not window._space_held
+
+
+def test_space_released_mid_pan_still_ends_as_a_pan(make_window):
+    window = make_window()
+    window.set_zoom(4.0)
+    window.set_space_held(True)
+    start = window.canvas.rect().center()
+    QTest.mousePress(window.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+    window.set_space_held(False)
+    QTest.mouseRelease(window.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+    assert not window.canvas.is_panning
+    assert window.line_start_xy is None and window.doc.strokes == []

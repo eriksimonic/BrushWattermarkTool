@@ -16,6 +16,10 @@ RAIL_TOOLS = (
     (ToolMode.PATH, "pen-tool", "Path", "A"),
     (ToolMode.ERASER, "eraser", "Eraser", "E"),
 )
+NAV_TOOLS = (
+    (ToolMode.PAN, "hand", "Pan", "H"),
+    (ToolMode.ZOOM, "zoom-in", "Zoom", "Z"),
+)
 
 # Only shortcuts the app actually handles (MainWindow.keyPressEvent / canvas input).
 SHORTCUTS = (
@@ -23,6 +27,10 @@ SHORTCUTS = (
     ("B", "Brush tool"),
     ("A", "Path tool"),
     ("E", "Eraser tool"),
+    ("H", "Pan tool"),
+    ("Z", "Zoom tool"),
+    ("Space", "Hold to pan"),
+    ("Alt+Click", "Zoom out (Zoom)"),
     ("Wheel", "Strength"),
     ("Alt+Wheel", "Brush size"),
     ("Right-click", "Stop drawing (Brush)"),
@@ -98,15 +106,15 @@ class ToolRail(QFrame):
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
         self.buttons: dict[ToolMode, RailButton] = {}
-        for tool, icon_name, label, key in RAIL_TOOLS:
-            button = RailButton(icon_name, label, key)
-            button.setCheckable(True)
-            button.clicked.connect(lambda _checked=False, t=tool: self.tool_changed.emit(t))
-            self._group.addButton(button)
-            self.buttons[tool] = button
-            column.addWidget(button, 0, Qt.AlignmentFlag.AlignHCenter)
-
-        column.addWidget(self._divider(), 0, Qt.AlignmentFlag.AlignHCenter)
+        for tools in (RAIL_TOOLS, NAV_TOOLS):
+            for tool, icon_name, label, key in tools:
+                button = RailButton(icon_name, label, key)
+                button.setCheckable(True)
+                button.clicked.connect(lambda _checked=False, t=tool: self.tool_changed.emit(t))
+                self._group.addButton(button)
+                self.buttons[tool] = button
+                column.addWidget(button, 0, Qt.AlignmentFlag.AlignHCenter)
+            column.addWidget(self._divider(), 0, Qt.AlignmentFlag.AlignHCenter)
         self.auto_place_btn = RailButton("wand-2", "Auto-place watermarks")
         self.auto_place_btn.clicked.connect(lambda _checked=False: self.auto_place_requested.emit())
         column.addWidget(self.auto_place_btn, 0, Qt.AlignmentFlag.AlignHCenter)

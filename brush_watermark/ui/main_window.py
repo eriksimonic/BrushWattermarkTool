@@ -5,13 +5,18 @@ from typing import Optional
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QPixmap
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QCursor, QDesktopServices, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
     QHBoxLayout,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QScrollArea,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -35,7 +40,9 @@ from brush_watermark.ui.auto_updater import AutoUpdater
 from brush_watermark.ui.auto_watermark_worker import AutoWatermarkWorker
 from brush_watermark.ui.canvas import CanvasWidget
 from brush_watermark.ui.canvas_overlays import CanvasArea
+from brush_watermark.ui.design_tokens import TEXT
 from brush_watermark.ui.filmstrip import THUMB_H, THUMB_W, FilmstripWidget
+from brush_watermark.ui.icons import get_pixmap
 from brush_watermark.ui.inspector import INSPECTOR_WIDTH, InspectorPanel
 from brush_watermark.ui.layer_list import LayerItem
 from brush_watermark.ui.status_footer import StatusFooter
@@ -43,6 +50,10 @@ from brush_watermark.ui.styles import app_stylesheet
 from brush_watermark.ui.tool_rail import ToolRail
 from brush_watermark.ui.top_bar import TopBar
 from brush_watermark.ui.update_checker import UpdateChecker
+from brush_watermark.ui.zoom import clamp_zoom, step_zoom
+
+# Widgets where Space is typed text, not "hold to pan".
+_TEXT_INPUT_TYPES = (QLineEdit, QAbstractSpinBox, QTextEdit, QPlainTextEdit)
 
 
 def pil_to_qpixmap(image: Image.Image) -> QPixmap:
@@ -68,6 +79,11 @@ class MainWindow(QMainWindow):
         self.offset_y = 0.0
         self.refresh_pending = False
         self.zoom_is_fit = True
+        self.manual_scale = 1.0  # used while zoom_is_fit is False
+        # (img_x, img_y, viewport_x, viewport_y): keep that image point under
+        # that viewport point after the next zoom change.
+        self._pending_zoom_anchor: Optional[tuple[float, float, float, float]] = None
+        self._space_held = False
         self.suppress_guides = False
         self._wheel_guide_timer = QTimer(self)
         self._wheel_guide_timer.setSingleShot(True)
@@ -99,6 +115,9 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu_bar()
         self._connect_signals()
+        # App-wide so Space-to-pan works whatever widget has focus (and a
+        # focused button isn't clicked by it).
+        QApplication.instance().installEventFilter(self)
         self._refresh_document_list_ui()
         self.update_labels()
         self.schedule_preview(1)
@@ -114,6 +133,7 @@ class MainWindow(QMainWindow):
         for worker in (self._auto_watermark_worker, self._update_checker, self._auto_updater):
             if worker is not None and worker.isRunning():
                 worker.wait(3000)
+        QApplication.instance().removeEventFilter(self)
         super().closeEvent(event)
 
     def _build_filmstrip_thumbnails(self) -> list[QPixmap]:
@@ -219,6 +239,9 @@ class MainWindow(QMainWindow):
             on_pointer_leave=self._on_pointer_leave,
             text_span_info=self.doc.text_span_info,
             on_double_click=self.handle_double_click,
+            should_pan=self._should_pan,
+            on_pan=self._pan_by,
+            on_pan_state=lambda _panning: self._update_canvas_cursor(),
         )
         self.canvas_scroll = QScrollArea()
         self.canvas_scroll.setObjectName("CanvasScrollArea")
@@ -267,7 +290,10 @@ class MainWindow(QMainWindow):
         self.top_bar.preview_changed.connect(lambda _original: self.on_preview_mode_changed())
         self.tool_rail.tool_changed.connect(self.set_active_tool)
         self.tool_rail.auto_place_requested.connect(lambda: self.start_auto_watermark(ins.density()))
-        self.canvas_area.zoom_pill.zoom_mode_changed.connect(self.on_zoom_mode_changed)
+        zoom_pill = self.canvas_area.zoom_pill
+        zoom_pill.zoom_mode_changed.connect(self.on_zoom_mode_changed)
+        zoom_pill.zoom_step_requested.connect(lambda direction: self.zoom_step(direction))
+        zoom_pill.zoom_percent_entered.connect(lambda scale: self.set_zoom(scale))
         self.footer.update_now.connect(self.start_auto_update)
         self.filmstrip.imageSelected.connect(self.switch_active_document)
         self.filmstrip.previousRequested.connect(self.show_previous_image)
@@ -535,8 +561,76 @@ class MainWindow(QMainWindow):
         self.canvas.update()
 
     def on_zoom_mode_changed(self, is_100: bool):
-        self.zoom_is_fit = not is_100
+        if is_100:
+            self.set_zoom(1.0)
+            return
+        self.zoom_is_fit = True
+        self._pending_zoom_anchor = None
         self.refresh_preview()
+
+    def set_zoom(self, scale: float, anchor: Optional[tuple[float, float]] = None) -> None:
+        """Zoom to `scale`, keeping the image point under `anchor` (viewport
+        coordinates; default: the viewport centre) where it is."""
+        viewport = self.canvas_scroll.viewport()
+        if anchor is None:
+            anchor = (viewport.width() / 2, viewport.height() / 2)
+        ax, ay = anchor
+        # The canvas sits at -scroll inside the viewport.
+        img_x = (ax - self.canvas.x() - self.offset_x) / max(self.scale, 0.0001)
+        img_y = (ay - self.canvas.y() - self.offset_y) / max(self.scale, 0.0001)
+        self.zoom_is_fit = False
+        self.manual_scale = clamp_zoom(scale)
+        self._pending_zoom_anchor = (img_x, img_y, ax, ay)
+        self.refresh_preview()
+
+    def zoom_step(self, direction: int, anchor: Optional[tuple[float, float]] = None) -> None:
+        self.set_zoom(step_zoom(self.scale, direction), anchor)
+
+    def _zoom_click(self, canvas_x: float, canvas_y: float) -> None:
+        alt = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
+        anchor = (canvas_x + self.canvas.x(), canvas_y + self.canvas.y())
+        self.zoom_step(-1 if alt else 1, anchor)
+
+    # --- Panning (Pan tool, or Space held in any tool) ---
+
+    def _should_pan(self) -> bool:
+        return self._space_held or self.active_tool == ToolMode.PAN
+
+    def _pan_by(self, dx: float, dy: float) -> None:
+        h_bar = self.canvas_scroll.horizontalScrollBar()
+        v_bar = self.canvas_scroll.verticalScrollBar()
+        h_bar.setValue(h_bar.value() - round(dx))
+        v_bar.setValue(v_bar.value() - round(dy))
+
+    def set_space_held(self, held: bool) -> None:
+        if held != self._space_held:
+            self._space_held = held
+            self._update_canvas_cursor()
+
+    def _update_canvas_cursor(self) -> None:
+        if self.canvas.is_panning:
+            self.canvas.setCursor(Qt.CursorShape.ClosedHandCursor)
+        elif self._should_pan():
+            self.canvas.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif self.active_tool == ToolMode.ZOOM:
+            self.canvas.setCursor(QCursor(get_pixmap("zoom-in", 20, TEXT), 9, 9))
+        else:
+            self.canvas.unsetCursor()
+
+    def eventFilter(self, obj, event):
+        etype = event.type()
+        if etype == QEvent.Type.WindowDeactivate and obj is self:
+            # The Space release would go to another window; don't stay stuck panning.
+            self.set_space_held(False)
+        elif etype in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and event.key() == Qt.Key.Key_Space:
+            if QApplication.activeWindow() is not self or isinstance(
+                QApplication.focusWidget(), _TEXT_INPUT_TYPES
+            ):
+                return False
+            if not event.isAutoRepeat():
+                self.set_space_held(etype == QEvent.Type.KeyPress)
+            return True
+        return super().eventFilter(obj, event)
 
     def set_guide_suppressed(self, suppressed: bool):
         self.suppress_guides = suppressed
@@ -648,15 +742,23 @@ class MainWindow(QMainWindow):
             fit_scale = min(canvas_w / content_w, canvas_h / content_h)
             self.scale = max(0.0001, min(fit_scale, 1.0))
         else:
-            self.scale = 1.0
-        self.canvas_area.zoom_pill.set_zoom_percent(round(self.scale * 100))
+            self.scale = self.manual_scale
+        self.canvas_area.zoom_pill.set_zoom_state(round(self.scale * 100), self.zoom_is_fit)
         self.display_w = max(1, int(self.doc.full_w * self.scale))
         self.display_h = max(1, int(self.doc.full_h * self.scale))
+        # Above 100 % the preview is rendered at 1:1 and the canvas scales it up
+        # when drawing; rendering it at 400 % would cost far too much memory.
+        render_scale = min(self.scale, 1.0)
+        render_w = max(1, int(self.doc.full_w * render_scale))
+        render_h = max(1, int(self.doc.full_h * render_scale))
         if self.top_bar.show_original():
-            preview_image = self.doc.make_original_preview_image(self.display_w, self.display_h)
+            preview_image = self.doc.make_original_preview_image(render_w, render_h)
         else:
-            preview_image = self.doc.make_preview_image(self.display_w, self.display_h, self.scale)
+            preview_image = self.doc.make_preview_image(render_w, render_h, render_scale)
         pixmap_w, pixmap_h = preview_image.size
+        if self.scale > render_scale:
+            ratio = self.scale / render_scale
+            pixmap_w, pixmap_h = round(pixmap_w * ratio), round(pixmap_h * ratio)
 
         if self.zoom_is_fit:
             self.canvas_scroll.setWidgetResizable(True)
@@ -676,6 +778,13 @@ class MainWindow(QMainWindow):
         self.offset_y = (canvas_h - pixmap_h) // 2
         self.preview_pixmap = pil_to_qpixmap(preview_image)
         self.canvas.preview_pixmap = self.preview_pixmap
+        self.canvas.preview_draw_size = (pixmap_w, pixmap_h)
+        if self._pending_zoom_anchor is not None:
+            img_x, img_y, ax, ay = self._pending_zoom_anchor
+            self._pending_zoom_anchor = None
+            if not self.zoom_is_fit:
+                self.canvas_scroll.horizontalScrollBar().setValue(round(self.offset_x + img_x * self.scale - ax))
+                self.canvas_scroll.verticalScrollBar().setValue(round(self.offset_y + img_y * self.scale - ay))
         self.canvas.update()
 
     def resizeEvent(self, event):
@@ -696,6 +805,7 @@ class MainWindow(QMainWindow):
             self.anchor_drag_active = False
             self.suppress_guides = False
         self.tool_rail.set_active_tool(self.active_tool)
+        self._update_canvas_cursor()
         self.canvas_area.hint_pill.set_tool(self.active_tool)
         self.canvas_area.refresh_overlays()
         self.canvas.update()
@@ -710,6 +820,10 @@ class MainWindow(QMainWindow):
             self.set_active_tool(ToolMode.PATH)
         elif key == Qt.Key.Key_E:
             self.set_active_tool(ToolMode.ERASER)
+        elif key == Qt.Key.Key_H:
+            self.set_active_tool(ToolMode.PAN)
+        elif key == Qt.Key.Key_Z:
+            self.set_active_tool(ToolMode.ZOOM)
         elif key == Qt.Key.Key_Escape:
             if self.active_tool == ToolMode.BRUSH and self.line_start_xy is not None:
                 self.line_start_xy = None
@@ -732,6 +846,12 @@ class MainWindow(QMainWindow):
     # --- Left-button dispatch ---
 
     def start_left_interaction(self, canvas_x: float, canvas_y: float):
+        # Pan presses never get here (CanvasWidget handles them via should_pan).
+        if self.active_tool == ToolMode.ZOOM:
+            self._zoom_click(canvas_x, canvas_y)
+            return
+        if self.active_tool == ToolMode.PAN:
+            return
         if not self.inside_image_canvas(canvas_x, canvas_y):
             return
         img_x, img_y = self.canvas_to_image_xy(canvas_x, canvas_y)
@@ -745,7 +865,7 @@ class MainWindow(QMainWindow):
             self._path_press(img_x, img_y)
 
     def continue_left_interaction(self, canvas_x: float, canvas_y: float):
-        if self.active_tool == ToolMode.POINTER:
+        if self.active_tool in (ToolMode.POINTER, ToolMode.PAN, ToolMode.ZOOM):
             return
         if not self.inside_image_canvas(canvas_x, canvas_y):
             return
@@ -757,6 +877,8 @@ class MainWindow(QMainWindow):
             self._path_move(canvas_x, canvas_y)
 
     def finish_left_interaction(self, canvas_x: float, canvas_y: float):
+        if self.active_tool in (ToolMode.PAN, ToolMode.ZOOM):
+            return
         if self.active_tool == ToolMode.POINTER:
             self._pointer_release(canvas_x, canvas_y)
         elif self.active_tool == ToolMode.BRUSH:
@@ -780,6 +902,10 @@ class MainWindow(QMainWindow):
 
     def handle_double_click(self, canvas_x: float, canvas_y: float):
         """Insert an anchor at the clicked segment (Path tool only)."""
+        if self.active_tool == ToolMode.ZOOM:
+            # The second click of a quick double-click is still a zoom click.
+            self._zoom_click(canvas_x, canvas_y)
+            return
         if self.active_tool != ToolMode.PATH:
             return
         if not self._layer_selected() or not self.inside_image_canvas(canvas_x, canvas_y):
