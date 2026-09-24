@@ -114,6 +114,7 @@ a = Analysis(
         ("brush_watermark/assets/icon.png", "brush_watermark/assets"),
         ("brush_watermark/assets/salient_object.onnx", "brush_watermark/assets"),
         ("brush_watermark/assets/icons", "brush_watermark/assets/icons"),
+        ("brush_watermark/assets/fonts", "brush_watermark/assets/fonts"),
     ],
     hiddenimports=[
         "PIL.ImageQt",

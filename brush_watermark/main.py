@@ -15,6 +15,7 @@ from brush_watermark.config import (
     save_settings,
 )
 from brush_watermark.models import Settings
+from brush_watermark.ui.app_fonts import register_app_fonts, ui_font
 
 
 def select_jpg_files() -> list[Path]:
@@ -69,6 +70,8 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
     app.setWindowIcon(load_app_icon())
+    register_app_fonts()
+    app.setFont(ui_font())
 
     image_paths = resolve_image_paths()
     if not image_paths:
