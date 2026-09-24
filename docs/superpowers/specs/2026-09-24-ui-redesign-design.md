@@ -44,11 +44,12 @@ Approach: keep Qt widgets and all canvas/editing logic; replace the design token
   - Anchor handles become white with a blue ring.
 - **Filmstrip** (shown only with 2+ images): an "Images" label and 98×66 thumbnails with a number badge and an unsaved-dot badge. The active one gets a blue ring.
 - **Inspector** (scrollable, collapsible sections):
-  - **Watermark:** text field; font combo plus a read-only "N px" chip (the font follows the brush); an Auto-fit switch; a Repeat switch with a gap stepper.
+  - **Watermark:** text field; font combo plus a read-only "N px" chip (the font follows the brush); an Auto-fit switch; a Repeat switch with a gap stepper; the visible metadata strip switch, with the additional copy info field shown only while the strip is on. (Moved here from Export after manual testing: in the collapsed Export section the strip toggle was effectively hidden.)
   - **Brush:** swatches; blend combo; Strength slider with an "Auto" chip (replaces the auto-strength checkbox); Size; Softness.
   - **Auto watermark:** density slider plus an Auto-place button, and a status line.
   - **Layers:** a count badge; rows with an eye toggle, type icon, name and details line; Delete and Clear all.
-  - **Export** (collapsed by default): visible metadata strip switch, additional copy info field, "Show in Explorer after save" switch.
+  - **Export** (collapsed by default): "Show in Explorer after save" switch.
+  - Each image keeps its own settings; switching images loads that image's document settings (text, font, auto-fit, auto strength, metadata strip, copy info) into the inspector.
 - **Footer:** key hints (Wheel = strength, Alt+Wheel = brush size, Dbl-click = add anchor, Del = remove anchor) and the "controls edit the selected layer…" note on the left. The version and update status sit on the right with a green or amber dot; when an update is available the status becomes an "Update to vX" button, and download progress shows there too.
 
 ## 2. Visual system

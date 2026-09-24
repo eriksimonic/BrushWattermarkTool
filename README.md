@@ -30,7 +30,7 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 - **Auto update check** — compares your version to the latest release on GitHub
 - **One-click update** — packaged Windows builds can download and install the latest release automatically
 - **Cross-platform** — Windows, macOS, and Linux builds plus run-from-source support
-- **Multi-image editing** — open several JPGs at once (multiple CLI args, or Lightroom's "Edit In" with multiple selected photos) and switch between them with a filmstrip; each image keeps its own edits in memory until saved
+- **Multi-image editing** — open several JPGs at once (multiple CLI args, or Lightroom's "Edit In" with multiple selected photos) and switch between them with a filmstrip; each image keeps its own edits and settings (watermark text, font, metadata strip, strokes) in memory until saved, and the inspector shows the active image's settings
 
 ## Requirements
 
