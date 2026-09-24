@@ -79,4 +79,7 @@ Lucide (ISC, `assets/icons/LICENSE-ICONS.txt`), shipped with `stroke="currentCol
 | `styles.py` | Global Qt stylesheet (object-name based) |
 | `controls.py` | Shared custom controls (above) |
 | `top_bar.py`, `tool_rail.py`, `inspector.py`, `layer_list.py`, `canvas_overlays.py`, `filmstrip.py`, `status_footer.py` | The window's areas |
+| `color_picker.py` | Brush swatch grid: image swatches, a custom swatch, the dashed pick-from-image button |
+| `zoom.py` | Zoom steps, clamping and parsing the typed % (no Qt) |
+| `file_dialogs.py` | The JPG file picker (launch and Add images) |
 | `icons.py` | SVG icon loading, recolouring, caching |

@@ -12,15 +12,16 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 
 ## Features
 
-- **Four editing tools** — Pointer (select), Brush (draw strokes), Path (edit anchors), and Eraser (remove watermark pixels)
+- **Editing tools** — Pointer (select), Brush (draw strokes), Path (edit anchors), and Eraser (remove watermark pixels), plus Pan and Zoom for moving around the photo
+- **Zoom and pan** — Fit, 1:1, zoom −/+ or a typed zoom % (10–400 %); the Zoom tool zooms around the clicked point, and holding Space pans in any tool
 - **Brush strokes** — freehand drag or click-to-place straight segments; snap to stroke endpoints to resume a line; right-click stops drawing
-- **Path editing** — drag anchors on the selected stroke, double-click a segment to add an anchor, Delete to remove one
+- **Path editing** — drag anchors on the selected stroke, double-click a segment to add an anchor, Delete to remove one (with no anchor selected, Delete removes the selected layer)
 - **Per-layer control** — each stroke has its own color, blend mode, strength, brush size, softness, and repeat settings
 - **Repeat text** — optionally tile watermark text along long strokes, with adjustable gap
 - **Auto strength** — optionally compute each new stroke's strength from the pixels underneath it, so flat areas get a fainter mark and busy/textured areas can hide a stronger one
 - **Auto-place watermarks** — finds busy, detail-rich areas that avoid the photo's focal subject and drops several faint, low-opacity watermarks there, with an adjustable density
 - **Blend modes** — Normal, Soft light, Lighten, Darken, Difference, Overlay, Screen, Multiply, Hard light
-- **Image color picker** — 8 colors sampled from the photo, plus white, 50% gray, and black
+- **Image color picker** — 8 colors sampled from the photo, plus white, 50% gray, and black; or pick any colour straight from the photo (I)
 - **Eraser tool** — paint away watermark pixels without deleting strokes
 - **Metadata strip** — optional footer with camera, lens, exposure, serial number, and custom copy text (read from EXIF)
 - **Save copy** — export a watermarked copy with an auto-generated filename (`{name}_{serial}_{datetime}_watermarked.jpg`) without overwriting the original
@@ -30,7 +31,7 @@ Each watermark is saved into the image file itself (JPEG). Original EXIF metadat
 - **Auto update check** — compares your version to the latest release on GitHub
 - **One-click update** — packaged Windows builds can download and install the latest release automatically
 - **Cross-platform** — Windows, macOS, and Linux builds plus run-from-source support
-- **Multi-image editing** — open several JPGs at once (multiple CLI args, or Lightroom's "Edit In" with multiple selected photos) and switch between them with a filmstrip; each image keeps its own edits and settings (watermark text, font, metadata strip, strokes) in memory until saved, and the inspector shows the active image's settings
+- **Multi-image editing** — open several JPGs at once (multiple CLI args, or Lightroom's "Edit In" with multiple selected photos) and switch between them with a filmstrip, its ‹ › buttons or Ctrl+←/→; add more with the filmstrip's **Add** tile or File → Add Images (Ctrl+O); each image keeps its own edits and settings (watermark text, font, metadata strip, strokes) in memory until saved, and the inspector shows the active image's settings
 
 ## Requirements
 
@@ -90,16 +91,23 @@ chmod +x BrushWatermark/BrushWatermark   # if needed
 | **Brush** | B | Left-drag = freehand · left-click = straight-line points · left-click a line end = resume (snap) · right-click = stop drawing |
 | **Path** | A | Drag anchor · double-click segment = add anchor · Del = remove anchor |
 | **Eraser** | E | Drag to erase watermark pixels |
+| **Pan** | H | Drag to move around a zoomed-in photo · hold Space to pan in any tool |
+| **Zoom** | Z | Click = zoom in around that point · Alt+click = zoom out |
 
 | Adjustment | Control |
 |------------|---------|
 | Change strength | Mouse wheel |
 | Change brush / font size | Alt + mouse wheel |
-| Cancel line / deselect anchor | Escape |
+| Cancel line / deselect anchor / cancel colour pick | Escape |
+| Pick a colour from the photo | I (or the dashed **+** swatch), then click the photo |
+| Delete the selected layer | Del (in Path, a selected anchor goes first) |
+| Previous / next image | Ctrl + ← / → |
+| Save & close | Ctrl + S |
+| Add images | Ctrl + O |
 
 ### Menus
 
-- **File** — Save & Close, Save Copy & Close, Save All & Close (with several images), Exit Without Saving (also available from the top bar's Exit, Save copy and Save & close buttons)
+- **File** — Add Images (Ctrl+O), Save & Close (Ctrl+S), Save Copy & Close, Save All & Close (with several images), Exit Without Saving (also available from the top bar's Exit, Save copy and Save & close buttons)
 - **Tools** — Install or remove the Windows Explorer right-click shortcut for JPG/JPEG files; multi-selecting files and choosing it opens them all in one window with a filmstrip to switch between them (files that can't be opened are skipped with a warning)
 - **Help** — About (version and usage)
 
@@ -107,16 +115,16 @@ chmod +x BrushWatermark/BrushWatermark   # if needed
 
 A modern dark editor — see [`brush_watermark/ui/DESIGN.md`](brush_watermark/ui/DESIGN.md) for the full UI spec.
 
-- **Top bar** — menus, the current file name, camera serial and image index, an **Unsaved** indicator, the **Original | Watermarked** preview toggle, and **Exit**, **Save copy** and **Save & close** (its menu adds **Save all & close** when several images are open)
-- **Tool rail** — Select (V), Brush (B), Path (A), Eraser (E), **Auto-place watermarks**, and a keyboard-shortcuts popup
-- **Canvas** — floating hints for the current tool, **Fit / 1:1** zoom with the current zoom %, and a readout of the brush colour, size, strength and blend mode
+- **Top bar** — menus, the current file name, camera serial (with a copy button) and image index, an **Unsaved** indicator, the **Original | Watermarked** preview toggle, and **Exit**, **Save copy** and **Save & close** (its menu adds **Save all & close** when several images are open)
+- **Tool rail** — Select (V), Brush (B), Path (A), Eraser (E), Pan (H), Zoom (Z), **Auto-place watermarks**, and a keyboard-shortcuts popup
+- **Canvas** — floating hints for the current tool, a zoom pill (−, an editable zoom %, +, **Fit**, **1:1**), and a readout of the brush colour, size, strength and blend mode
 - **Inspector**
   - **Watermark** — text, font (its size follows the brush), auto-fit, repeat along stroke with a gap, and the **Visible metadata strip** switch (camera, lens, settings, serial and copyright under the photo) with its extra copy text
-  - **Brush** — colour, blend mode, strength (with **Auto** strength, which computes opacity from the underlying pixels), size and softness. These set **tool defaults** when nothing is selected, or edit the **selected layer** (the section title shows `Layer · …`)
+  - **Brush** — colour (image swatches, a custom swatch for a picked colour, and the dashed **+** to pick from the photo), blend mode, strength (with **Auto** strength, which computes opacity from the underlying pixels), size and softness. These set **tool defaults** when nothing is selected, or edit the **selected layer** (the section title shows `Layer · …`)
   - **Auto watermark** — density and **Auto-place**
-  - **Layers** — each stroke with an eye toggle to hide it; **Delete** or **Clear all**
+  - **Layers** — each stroke with an eye toggle to hide it; **Delete** (Del) or **Clear all**
   - **Export** — **Show in Explorer after save**
-- **Filmstrip** — with several images, numbered thumbnails with an unsaved marker
+- **Filmstrip** — with several images, numbered thumbnails with an unsaved marker, ‹ › buttons, and an **Add** tile to open more images
 - **Footer** — common shortcuts, and the version with update status (an **Update to vX** button appears when a new release is available)
 
 **Save & close** overwrites the opened image (JPEG quality 95). **Save copy** writes a new file next to the original, named from the serial and capture date in EXIF when available, then closes the image. **Show in Explorer after save** opens the file's location when done. **Original** shows a clean preview without watermarks or guides. **Exit** discards changes to the image; tool defaults and watermark text are still saved to settings.
