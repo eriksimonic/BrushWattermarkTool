@@ -1,10 +1,10 @@
 """Top bar: logo and menus, active file info, Original/Watermarked toggle, save actions."""
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QSizePolicy, QWidget
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QSizePolicy, QWidget
 
 from brush_watermark.ui.controls import ElidedLabel, SegmentedControl, SplitButton, make_menu
-from brush_watermark.ui.design_tokens import ON_ACCENT, TEXT, TEXT_MUTED, TEXT_SECONDARY
+from brush_watermark.ui.design_tokens import ACCENT_TEXT, ON_ACCENT, TEXT, TEXT_MUTED, TEXT_SECONDARY
 from brush_watermark.ui.icons import get_icon, get_pixmap
 
 
@@ -52,10 +52,31 @@ class TopBar(QFrame):
         self.file_name_label = ElidedLabel(elide_mode=Qt.TextElideMode.ElideMiddle)
         self.file_name_label.setObjectName("FileName")
         self.file_name_label.setMinimumWidth(80)
+        # The chip is a bordered box holding the serial text and a copy button.
+        self.serial_box = QFrame()
+        self.serial_box.setObjectName("SerialChip")
+        self.serial_box.setToolTip("Image serial")
+        self.serial_box.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.serial_chip = QLabel()
-        self.serial_chip.setObjectName("SerialChip")
-        self.serial_chip.setToolTip("Image serial")
-        self.serial_chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.serial_chip.setObjectName("SerialText")
+        self.copy_serial_button = QPushButton()
+        self.copy_serial_button.setObjectName("SerialCopy")
+        self.copy_serial_button.setFixedSize(20, 20)
+        self.copy_serial_button.setIconSize(QSize(11, 11))
+        self.copy_serial_button.setToolTip("Copy serial")
+        self.copy_serial_button.setAccessibleName("Copy serial")
+        self.copy_serial_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.copy_serial_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._show_copy_icon()
+        serial_row = QHBoxLayout(self.serial_box)
+        serial_row.setContentsMargins(7, 0, 1, 0)
+        serial_row.setSpacing(2)
+        serial_row.addWidget(self.serial_chip)
+        serial_row.addWidget(self.copy_serial_button)
+        self._copy_feedback_timer = QTimer(self)
+        self._copy_feedback_timer.setSingleShot(True)
+        self._copy_feedback_timer.timeout.connect(self._show_copy_icon)
+        self._serial = ""
         self.index_badge = QLabel()
         self.index_badge.setObjectName("CountBadge")
         self.index_badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -73,7 +94,7 @@ class TopBar(QFrame):
         self.unsaved_indicator.hide()
         info = QHBoxLayout()
         info.setSpacing(8)
-        for widget in (file_icon, self.file_name_label, self.serial_chip, self.index_badge, self.unsaved_indicator):
+        for widget in (file_icon, self.file_name_label, self.serial_box, self.index_badge, self.unsaved_indicator):
             info.addWidget(widget, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addLayout(info)
 
@@ -94,7 +115,8 @@ class TopBar(QFrame):
         self.save_copy_button.setToolTip("Save a watermarked copy next to the original and close")
         self.save_split = SplitButton("Save && close", "save")
         menu = self.save_split.menu
-        self.save_close_action = menu.addAction(get_icon("save", 15, TEXT), "Save && close")
+        # "	" only shows the key; the Ctrl+S shortcut itself is the File menu's action.
+        self.save_close_action = menu.addAction(get_icon("save", 15, TEXT), "Save && close	Ctrl+S")
         self.save_all_action = menu.addAction(get_icon("images", 15, TEXT), "Save all && close")
         menu.addSeparator()
         self.save_copy_action = menu.addAction(get_icon("copy", 15, TEXT), "Save copy && close")
@@ -114,6 +136,7 @@ class TopBar(QFrame):
         self.save_close_action.triggered.connect(lambda _checked=False: self.save_and_close.emit())
         self.save_all_action.triggered.connect(lambda _checked=False: self.save_all_and_close.emit())
         self.save_copy_action.triggered.connect(lambda _checked=False: self.save_copy_and_close.emit())
+        self.copy_serial_button.clicked.connect(lambda _checked=False: self.copy_serial())
         self.set_multi_document_mode(False)
 
     def add_menu(self, title: str) -> QMenu:
@@ -129,10 +152,24 @@ class TopBar(QFrame):
 
     def set_file_info(self, name: str, serial: str | None, index: int, count: int) -> None:
         self.file_name_label.setText(name)
+        self._serial = serial or ""
         self.serial_chip.setText(f"#{serial}" if serial else "")
         self.serial_chip.setVisible(bool(serial))
+        self.serial_box.setVisible(bool(serial))
         self.index_badge.setText(f"{index + 1} / {count}")
         self.index_badge.setVisible(count > 1)
+
+    def copy_serial(self) -> None:
+        if not self._serial:
+            return
+        QApplication.clipboard().setText(self._serial)
+        self.copy_serial_button.setIcon(get_icon("check", 11, ACCENT_TEXT))
+        self.copy_serial_button.setToolTip("Copied")
+        self._copy_feedback_timer.start(1200)
+
+    def _show_copy_icon(self) -> None:
+        self.copy_serial_button.setIcon(get_icon("copy", 11, TEXT_MUTED))
+        self.copy_serial_button.setToolTip("Copy serial")
 
     def set_unsaved(self, dirty: bool) -> None:
         self.unsaved_indicator.setVisible(dirty)

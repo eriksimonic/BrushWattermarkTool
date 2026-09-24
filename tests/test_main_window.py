@@ -158,3 +158,70 @@ def test_switching_images_shows_each_images_own_document_settings(make_window):
     window.switch_active_document(0)
     assert window.inspector.add_metadata_check.isChecked() is True
     assert window.inspector.watermark_text_edit.text() == "Only on image 1"
+
+
+def test_ctrl_s_is_the_save_action_shortcut(make_window, monkeypatch):
+    window = make_window()
+    assert window.save_action.shortcut().toString() == "Ctrl+S"
+    assert window.save_action in window.actions()
+    seen = []
+    monkeypatch.setattr(window, "save_and_close", lambda: seen.append("save"))
+    window.save_action.trigger()
+    assert seen == ["save"]
+
+
+def test_prev_next_image_wraps_around(make_window):
+    window = make_window(3)
+    assert window.next_image_action.shortcut().toString() == "Ctrl+Right"
+    assert window.prev_image_action.shortcut().toString() == "Ctrl+Left"
+    window.prev_image_action.trigger()
+    assert window.active_index == 2
+    window.next_image_action.trigger()
+    assert window.active_index == 0
+    window.filmstrip.next_button.click()
+    assert window.active_index == 1
+    assert window.top_bar.index_badge.text() == "2 / 3"
+
+
+def test_prev_next_is_a_no_op_with_one_image(make_window):
+    window = make_window()
+    window.next_image_action.trigger()
+    assert window.active_index == 0
+
+
+def test_footer_image_nav_hint_only_with_multiple_images(make_window):
+    from brush_watermark.ui.status_footer import IMAGE_NAV_HINT
+
+    assert make_window().footer.hints[IMAGE_NAV_HINT].isHidden()
+    assert not make_window(2).footer.hints[IMAGE_NAV_HINT].isHidden()
+
+
+def test_delete_key_removes_selected_layer(make_window):
+    window = make_window()
+    add_stroke(window)
+    window.select_stroke_by_index(0)
+    QTest.keyClick(window, Qt.Key.Key_Delete)
+    assert window.doc.strokes == []
+
+
+def test_delete_key_prefers_selected_path_anchor(make_window):
+    window = make_window()
+    points = [(20.0, 20.0), (120.0, 80.0), (250.0, 150.0)]
+    window.doc.strokes.append(
+        Stroke(name="Stroke 1", points=list(points), anchors=list(points), brush_size=40, opacity=50)
+    )
+    window.refresh_stroke_list()
+    window.select_stroke_by_index(0)
+    window.set_active_tool(ToolMode.PATH)
+    window.selected_anchor_index = 1
+    QTest.keyClick(window, Qt.Key.Key_Delete)
+    assert len(window.doc.strokes) == 1
+    assert len(window.doc.strokes[0].anchors) == 2
+
+
+def test_delete_key_without_selection_does_nothing(make_window):
+    window = make_window()
+    add_stroke(window)
+    window.select_stroke_by_index(-1)
+    QTest.keyClick(window, Qt.Key.Key_Delete)
+    assert len(window.doc.strokes) == 1

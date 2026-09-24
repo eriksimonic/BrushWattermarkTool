@@ -72,10 +72,8 @@ def app_stylesheet() -> str:
     /* ---- Text roles ---- */
     QLabel#LogoMark {{ background: {ACCENT}; border-radius: 8px; }}
     QLabel#FileName {{ font-weight: 500; }}
-    QLabel#SerialChip {{
-        font-family: '{mono}'; font-size: 11px; font-weight: 500; color: {TEXT_SECONDARY};
-        border: 1px solid {BORDER}; border-radius: 6px; padding: 2px 7px;
-    }}
+    QFrame#SerialChip {{ border: 1px solid {BORDER}; border-radius: 6px; min-height: 22px; max-height: 22px; }}
+    QLabel#SerialText {{ font-family: '{mono}'; font-size: 11px; font-weight: 500; color: {TEXT_SECONDARY}; }}
     QLabel#CountBadge {{
         font-family: '{mono}'; font-size: 11px; font-weight: 500; color: {TEXT_LABEL};
         background: {SURFACE_RAISED}; border-radius: 5px; padding: 1px 6px;
@@ -100,6 +98,7 @@ def app_stylesheet() -> str:
         background: {SURFACE_MENU}; border: 1px solid {KEY_BADGE_BORDER}; border-bottom-width: 2px;
         border-radius: 4px; padding: 0 5px;
     }}
+    QLabel#KeyBadge:disabled {{ color: {TEXT_MUTED}; }}
     QLabel#FooterText {{ color: {TEXT_LABEL}; font-size: 11px; }}
     QLabel#ZoomPercent {{ font-family: '{mono}'; font-size: 12px; font-weight: 500; }}
     QLabel#ReadoutText {{ font-family: '{mono}'; font-size: 12px; font-weight: 500; color: {TEXT_SECONDARY}; }}
@@ -139,6 +138,7 @@ def app_stylesheet() -> str:
     QPushButton#SecondaryButton, QPushButton#DangerButton {{ background: {SURFACE_RAISED}; border-color: {BORDER_STRONG}; }}
     QPushButton#SecondaryButton:hover, QPushButton#DangerButton:hover {{ background: {SURFACE_RAISED_HOVER}; }}
     QPushButton#DangerButton {{ color: {DANGER_TEXT}; }}
+    QPushButton#SecondaryButton[keyBadge="true"] {{ padding-right: 40px; }}
     QPushButton#GhostButton {{ color: {TEXT_SECONDARY}; }}
     QPushButton#PrimaryButton, QPushButton#SplitMain, QPushButton#SplitArrow {{
         background: {ACCENT}; color: {ON_ACCENT}; border: none;
@@ -179,6 +179,9 @@ def app_stylesheet() -> str:
     }}
     QPushButton#PillButtonMono {{ font-family: '{mono}'; }}
     QPushButton#PillButton:checked, QPushButton#PillButtonMono:checked {{ background: {accent_tint}; color: {ACCENT_TEXT}; }}
+    QPushButton#SerialCopy {{ padding: 0; min-height: 20px; max-height: 20px; border-radius: 5px; }}
+    QPushButton#IconButton {{ padding: 0; min-height: 30px; max-height: 30px; border-radius: 7px; }}
+    QPushButton#PillIconButton {{ padding: 0; min-height: 28px; max-height: 28px; border-radius: 7px; }}
     QPushButton#LayerEye {{ padding: 0; min-height: 28px; max-height: 28px; border-radius: 6px; }}
     QPushButton#FooterUpdateButton {{
         background: {ACCENT}; color: {ON_ACCENT}; border: none; border-radius: 5px;

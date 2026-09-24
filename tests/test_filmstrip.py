@@ -43,3 +43,13 @@ def test_set_thumbnails_replaces_items(qapp):
     strip = make_strip(3)
     strip.set_thumbnails([QPixmap(98, 66)])
     assert len(strip.items()) == 1
+
+
+def test_prev_next_buttons_emit(qapp):
+    strip = make_strip(3)
+    seen = []
+    strip.previousRequested.connect(lambda: seen.append("prev"))
+    strip.nextRequested.connect(lambda: seen.append("next"))
+    strip.prev_button.click()
+    strip.next_button.click()
+    assert seen == ["prev", "next"]

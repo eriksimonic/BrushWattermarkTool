@@ -27,8 +27,10 @@ SHORTCUTS = (
     ("Alt+Wheel", "Brush size"),
     ("Right-click", "Stop drawing (Brush)"),
     ("Dbl-click", "Add anchor (Path)"),
-    ("Del", "Remove anchor (Path)"),
+    ("Del", "Remove anchor (Path) / selected layer"),
     ("Esc", "Cancel line / deselect anchor"),
+    ("Ctrl+←/→", "Previous / next image"),
+    ("Ctrl+S", "Save & close"),
 )
 
 

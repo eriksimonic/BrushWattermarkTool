@@ -31,7 +31,7 @@ def test_auto_place_button_emits(qapp):
     assert seen == [True]
 
 
-def test_shortcuts_list_existing_keys_only():
+def test_shortcuts_list_starts_with_tools_and_includes_new_keys():
     keys = [k for k, _ in SHORTCUTS]
     assert keys[:4] == ["V", "B", "A", "E"]
-    assert "Ctrl+S" not in keys and "H" not in keys and "Z" not in keys
+    assert "Ctrl+S" in keys and "Ctrl+←/→" in keys

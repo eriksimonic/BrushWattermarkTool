@@ -78,3 +78,24 @@ def test_add_menu_adds_a_menu_button(qapp):
     assert isinstance(menu, QMenu)
     buttons = [b for b in bar.findChildren(QPushButton) if b.objectName() == "MenuButton"]
     assert [b.text() for b in buttons] == ["&File"] and buttons[0].menu() is menu
+
+
+def test_copy_serial_puts_serial_on_clipboard(qapp):
+    from PySide6.QtWidgets import QApplication
+
+    bar = TopBar()
+    bar.set_file_info("b.jpg", "6022905", 0, 1)
+    assert not bar.serial_box.isHidden()
+    bar.copy_serial_button.click()
+    assert QApplication.clipboard().text() == "6022905"
+    assert bar.copy_serial_button.toolTip() == "Copied"
+
+
+def test_serial_box_hidden_without_serial(qapp):
+    bar = TopBar()
+    bar.set_file_info("a.jpg", None, 0, 1)
+    assert bar.serial_box.isHidden()
+
+
+def test_save_menu_shows_ctrl_s(qapp):
+    assert TopBar().save_close_action.text().endswith("	Ctrl+S")

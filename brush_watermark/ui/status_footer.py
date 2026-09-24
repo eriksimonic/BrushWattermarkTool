@@ -8,11 +8,13 @@ from brush_watermark.ui.controls import ElidedLabel, KeyHint
 from brush_watermark.ui.design_tokens import ON_ACCENT, SUCCESS, TEXT_MUTED, WARNING
 from brush_watermark.ui.icons import get_icon
 
+IMAGE_NAV_HINT = ("Ctrl+←/→", "Prev / next image")
 FOOTER_HINTS = (
     ("Wheel", "Strength"),
     ("Alt+Wheel", "Brush size"),
+    IMAGE_NAV_HINT,
     ("Dbl-click", "Add anchor"),
-    ("Del", "Remove anchor"),
+    ("Del", "Remove anchor / layer"),
 )
 
 
@@ -28,8 +30,13 @@ class StatusFooter(QFrame):
         row = QHBoxLayout(self)
         row.setContentsMargins(14, 0, 14, 0)
         row.setSpacing(18)
+        self.hints: dict[tuple[str, str], KeyHint] = {}
         for keys, text in FOOTER_HINTS:
-            row.addWidget(KeyHint(keys, text, text_object_name="FooterText"))
+            hint = KeyHint(keys, text, text_object_name="FooterText")
+            self.hints[(keys, text)] = hint
+            row.addWidget(hint)
+        # Image navigation only means something with 2+ images open.
+        self.hints[IMAGE_NAV_HINT].hide()
         row.addStretch(1)
         note = ElidedLabel("Controls edit the selected layer, or tool defaults when nothing is selected")
         note.setObjectName("FooterText")
@@ -63,6 +70,9 @@ class StatusFooter(QFrame):
 
         self.update_now_button.clicked.connect(lambda _checked=False: self.update_now.emit())
         self._set_dot(TEXT_MUTED)
+
+    def set_multi_image(self, enabled: bool) -> None:
+        self.hints[IMAGE_NAV_HINT].setVisible(enabled)
 
     def _set_dot(self, color: str) -> None:
         self._status_dot.setStyleSheet(f"background: {color}; border-radius: 3px;")

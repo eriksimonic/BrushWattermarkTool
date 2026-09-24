@@ -1,12 +1,21 @@
 """Bottom strip for switching between open images (shown with 2+ images)."""
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QSizePolicy, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 from brush_watermark.ui.app_fonts import mono_font
-from brush_watermark.ui.design_tokens import ACCENT_BRIGHT, ACCENT_TEXT, BORDER, BORDER_HOVER, SHADOW, TEXT, WARNING
-from brush_watermark.ui.icons import get_pixmap
+from brush_watermark.ui.design_tokens import (
+    ACCENT_BRIGHT,
+    ACCENT_TEXT,
+    BORDER,
+    BORDER_HOVER,
+    SHADOW,
+    TEXT,
+    TEXT_SECONDARY,
+    WARNING,
+)
+from brush_watermark.ui.icons import get_icon, get_pixmap
 
 THUMB_W = 98
 THUMB_H = 66
@@ -105,6 +114,8 @@ class FilmstripWidget(QFrame):
     """Images title plus a horizontally scrolling row of thumbnails."""
 
     imageSelected = Signal(int)
+    previousRequested = Signal()
+    nextRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -118,7 +129,10 @@ class FilmstripWidget(QFrame):
 
         title = QWidget()
         title.setFixedWidth(92)
-        title_row = QHBoxLayout(title)
+        title_column = QVBoxLayout(title)
+        title_column.setContentsMargins(0, 0, 0, 0)
+        title_column.setSpacing(6)
+        title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(7)
         icon = QLabel()
@@ -128,7 +142,21 @@ class FilmstripWidget(QFrame):
         title_row.addWidget(icon)
         title_row.addWidget(text)
         title_row.addStretch(1)
+        nav_row = QHBoxLayout()
+        nav_row.setContentsMargins(0, 0, 0, 0)
+        nav_row.setSpacing(2)
+        self.prev_button = self._nav_button("chevron-left", "Previous image (Ctrl+Left)")
+        self.next_button = self._nav_button("chevron-right", "Next image (Ctrl+Right)")
+        nav_row.addWidget(self.prev_button)
+        nav_row.addWidget(self.next_button)
+        nav_row.addStretch(1)
+        title_column.addStretch(1)
+        title_column.addLayout(title_row)
+        title_column.addLayout(nav_row)
+        title_column.addStretch(1)
         row.addWidget(title)
+        self.prev_button.clicked.connect(lambda _checked=False: self.previousRequested.emit())
+        self.next_button.clicked.connect(lambda _checked=False: self.nextRequested.emit())
 
         self._scroll = QScrollArea()
         self._scroll.setObjectName("FilmstripScroll")
@@ -146,6 +174,19 @@ class FilmstripWidget(QFrame):
         row.addWidget(self._scroll, 1)
 
         self._items: list[_FilmstripItem] = []
+
+    @staticmethod
+    def _nav_button(icon_name: str, tip: str) -> QPushButton:
+        button = QPushButton()
+        button.setObjectName("IconButton")
+        button.setFixedSize(30, 30)
+        button.setIcon(get_icon(icon_name, 15, TEXT_SECONDARY))
+        button.setIconSize(QSize(15, 15))
+        button.setToolTip(tip)
+        button.setAccessibleName(tip)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        return button
 
     def items(self) -> list[_FilmstripItem]:
         return list(self._items)

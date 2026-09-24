@@ -5,7 +5,7 @@ unchanged; tools, saving, preview mode, zoom and version info live in the top
 bar, tool rail, canvas overlays and footer instead.
 """
 
-from PySide6.QtCore import QSize, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -23,7 +23,7 @@ from brush_watermark.rendering.blend import BLEND_MODE_CHOICES
 from brush_watermark.rendering.fonts import available_font_names
 from brush_watermark.services.auto_watermark import DEFAULT_DENSITY, MAX_DENSITY, MIN_DENSITY
 from brush_watermark.ui.color_picker import ColorSwatchPicker
-from brush_watermark.ui.controls import Chip, CollapsibleSection, SliderRow, Stepper, SwitchRow
+from brush_watermark.ui.controls import Chip, CollapsibleSection, KeyBadge, SliderRow, Stepper, SwitchRow
 from brush_watermark.ui.design_tokens import DANGER_TEXT, TEXT
 from brush_watermark.ui.icons import get_icon
 from brush_watermark.ui.layer_list import LayerItem, LayerList
@@ -159,6 +159,15 @@ class InspectorPanel(QFrame):
         self.delete_selected_btn = QPushButton("Delete")
         self.delete_selected_btn.setObjectName("SecondaryButton")
         self.delete_selected_btn.setIcon(get_icon("trash-2", 13, TEXT))
+        self.delete_selected_btn.setToolTip("Delete the selected layer (Del)")
+        # The badge sits in the button's right padding (QSS [keyBadge="true"]).
+        self.delete_selected_btn.setProperty("keyBadge", True)
+        delete_badge_row = QHBoxLayout(self.delete_selected_btn)
+        delete_badge_row.setContentsMargins(0, 0, 8, 0)
+        delete_badge_row.addStretch(1)
+        self.delete_key_badge = KeyBadge("Del")
+        self.delete_key_badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        delete_badge_row.addWidget(self.delete_key_badge, 0, Qt.AlignmentFlag.AlignVCenter)
         self.delete_all_btn = QPushButton("Clear all")
         self.delete_all_btn.setObjectName("DangerButton")
         self.delete_all_btn.setIcon(get_icon("trash", 13, DANGER_TEXT))

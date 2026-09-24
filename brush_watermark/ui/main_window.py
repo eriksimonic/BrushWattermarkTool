@@ -6,7 +6,7 @@ from typing import Optional
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QPixmap
+from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
@@ -137,9 +137,13 @@ class MainWindow(QMainWindow):
     def _build_menu_bar(self):
         file_menu = self.top_bar.add_menu("&File")
 
-        save_action = QAction("Save && Close", self)
-        save_action.triggered.connect(lambda _checked=False: self.save_and_close())
-        file_menu.addAction(save_action)
+        # Actions with shortcuts are also added to the window so the keys work
+        # while their menu is closed. Each key belongs to exactly one action.
+        self.save_action = QAction("Save && Close", self)
+        self.save_action.setShortcut(QKeySequence("Ctrl+S"))
+        self.save_action.triggered.connect(lambda _checked=False: self.save_and_close())
+        file_menu.addAction(self.save_action)
+        self.addAction(self.save_action)
 
         save_copy_action = QAction("Save Copy && Close", self)
         save_copy_action.triggered.connect(lambda _checked=False: self.save_copy_and_close())
@@ -154,6 +158,15 @@ class MainWindow(QMainWindow):
         exit_action = QAction("Exit Without Saving", self)
         exit_action.triggered.connect(lambda _checked=False: self.exit_without_saving())
         file_menu.addAction(exit_action)
+
+        self.prev_image_action = QAction("Previous image", self)
+        self.prev_image_action.setShortcut(QKeySequence("Ctrl+Left"))
+        self.prev_image_action.triggered.connect(lambda _checked=False: self.show_previous_image())
+        self.next_image_action = QAction("Next image", self)
+        self.next_image_action.setShortcut(QKeySequence("Ctrl+Right"))
+        self.next_image_action.triggered.connect(lambda _checked=False: self.show_next_image())
+        self.addAction(self.prev_image_action)
+        self.addAction(self.next_image_action)
 
         tools_menu = self.top_bar.add_menu("&Tools")
 
@@ -257,6 +270,8 @@ class MainWindow(QMainWindow):
         self.canvas_area.zoom_pill.zoom_mode_changed.connect(self.on_zoom_mode_changed)
         self.footer.update_now.connect(self.start_auto_update)
         self.filmstrip.imageSelected.connect(self.switch_active_document)
+        self.filmstrip.previousRequested.connect(self.show_previous_image)
+        self.filmstrip.nextRequested.connect(self.show_next_image)
 
     def _start_update_check(self):
         self.footer.set_version_info(__version__)
@@ -561,6 +576,14 @@ class MainWindow(QMainWindow):
         self._load_active_document_into_ui()
         self.canvas.update()
 
+    def show_previous_image(self) -> None:
+        if len(self.docs) > 1:
+            self.switch_active_document((self.active_index - 1) % len(self.docs))
+
+    def show_next_image(self) -> None:
+        if len(self.docs) > 1:
+            self.switch_active_document((self.active_index + 1) % len(self.docs))
+
     def _refresh_file_info(self) -> None:
         doc = self.doc
         self.top_bar.set_file_info(doc.image_path.name, doc.metadata.serial, self.active_index, len(self.docs))
@@ -695,11 +718,14 @@ class MainWindow(QMainWindow):
                 self.selected_anchor_index = -1
                 self.canvas.update()
         elif key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            # A selected Path anchor goes first; otherwise the selected layer.
             if self.active_tool == ToolMode.PATH and self.selected_anchor_index >= 0:
                 self.doc.delete_anchor(self.doc.selected_stroke_index, self.selected_anchor_index)
                 self.selected_anchor_index = -1
                 self.refresh_stroke_list()
                 self.schedule_preview()
+            elif self._layer_selected():
+                self.delete_selected_stroke()
         else:
             super().keyPressEvent(event)
 
@@ -1065,6 +1091,7 @@ class MainWindow(QMainWindow):
         self.filmstrip.setVisible(multi)
         self.filmstrip.set_active_index(self.active_index)
         self.save_all_action.setVisible(multi)
+        self.footer.set_multi_image(multi)
         self._refresh_file_info()
         self._update_dirty_indicators()
 
