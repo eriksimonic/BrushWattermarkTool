@@ -49,7 +49,7 @@ Approach: keep Qt widgets and all canvas/editing logic; replace the design token
   - **Auto watermark:** density slider plus an Auto-place button, and a status line.
   - **Layers:** a count badge; rows with an eye toggle, type icon, name and details line; Delete and Clear all.
   - **Export** (collapsed by default): visible metadata strip switch, additional copy info field, "Show in Explorer after save" switch.
-- **Footer:** key hints (Wheel = strength, Alt+Wheel = brush size, Dbl-click = add anchor, Del = remove anchor/layer) and the "controls edit the selected layer…" note on the left. The version and update status sit on the right with a green or amber dot; when an update is available the status becomes an "Update to vX" button, and download progress shows there too.
+- **Footer:** key hints (Wheel = strength, Alt+Wheel = brush size, Dbl-click = add anchor, Del = remove anchor) and the "controls edit the selected layer…" note on the left. The version and update status sit on the right with a green or amber dot; when an update is available the status becomes an "Update to vX" button, and download progress shows there too.
 
 ## 2. Visual system
 
@@ -107,3 +107,4 @@ New or replaced modules in `brush_watermark/ui/`:
 - Copy-serial button
 - Edit menu
 - Ctrl+S shortcut (the design's save menu shows a "Ctrl S" badge)
+- Del deletes the selected layer (today Del only removes a Path anchor)
