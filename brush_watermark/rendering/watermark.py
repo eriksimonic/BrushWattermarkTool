@@ -90,6 +90,22 @@ def _prepare_text_path(raw_points: list) -> list:
     return smooth_path_for_text(normalize_text_direction(raw_points))
 
 
+def _fit_text_glyphs(
+    points: list,
+    brush_size: int,
+    text: str,
+    font_name: str,
+    auto_fit: bool,
+    fill: tuple,
+):
+    """Compute the fitted font size, load it, and build the glyph cache for text."""
+    font_size = fitted_font_size(points, brush_size, text, font_name, auto_fit)
+    font = load_font(font_name, font_size)
+    glyphs = build_glyph_cache(text, font, fill)
+    base_width = sum(g[1] for g in glyphs)
+    return font_size, font, glyphs, base_width
+
+
 def compute_text_span(
     points: list,
     brush_size: int,
@@ -105,12 +121,9 @@ def compute_text_span(
     length = path_length(points)
     if length < 8:
         return None
-    font_size = fitted_font_size(
-        points, brush_size, text, font_name, auto_fit and not repeat_text
+    font_size, _font, glyphs, base_width = _fit_text_glyphs(
+        points, brush_size, text, font_name, auto_fit and not repeat_text, (255, 255, 255, 255)
     )
-    font = load_font(font_name, font_size)
-    glyphs = build_glyph_cache(text, font, (255, 255, 255, 255))
-    base_width = sum(g[1] for g in glyphs)
     start_d = 0.0
     end_d = length
     used_span = length
@@ -225,22 +238,15 @@ def draw_text_on_path(
     if length < 8:
         return
     repeat = stroke.repeat_text
-    font_size = fitted_font_size(
-        points,
-        stroke.brush_size,
-        text,
-        settings.font_name,
-        settings.auto_fit_text and not repeat,
-    )
-    font = load_font(settings.font_name, font_size)
     text_color = stroke.text_color
     r, g, b = parse_rgb(text_color)
     fill = (r, g, b, 255)
-    glyphs = build_glyph_cache(text, font, fill)
+    font_size, font, glyphs, base_width = _fit_text_glyphs(
+        points, stroke.brush_size, text, settings.font_name, settings.auto_fit_text and not repeat, fill
+    )
     if not glyphs:
         return
     ascent, descent = font.getmetrics()
-    base_width = sum(g[1] for g in glyphs)
     start = 0.0
     end = length
     if repeat:
@@ -285,23 +291,6 @@ def make_stroke_watermark_layer(
         alpha_channel, Image.new("L", alpha_channel.size, 0), stroke_mask
     )
     layer.putalpha(alpha_channel)
-    return layer
-
-
-def make_watermark_layer(
-    width: int,
-    height: int,
-    strokes: list[Stroke],
-    settings: Settings,
-    erase_mask: Image.Image,
-    scale_factor: float = 1.0,
-) -> Image.Image:
-    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    for stroke in strokes:
-        stroke_layer = make_stroke_watermark_layer(
-            width, height, stroke, settings, erase_mask, scale_factor
-        )
-        layer.alpha_composite(stroke_layer)
     return layer
 
 

@@ -26,6 +26,10 @@ class TestBuildCopyBasename:
         exif = {"BodySerialNumber": "ABC:123/456"}
         assert build_copy_basename("my photo", exif) == "my_photo_ABC_123_456_watermarked"
 
+    def test_decodes_bytes_exif_values_instead_of_repr(self):
+        exif = {"BodySerialNumber": b"123456789"}
+        assert build_copy_basename("DSC_1042", exif) == "DSC_1042_123456789_watermarked"
+
 
 class TestBuildWatermarkedCopyPath:
     def test_builds_path_next_to_source(self, tmp_path: Path):

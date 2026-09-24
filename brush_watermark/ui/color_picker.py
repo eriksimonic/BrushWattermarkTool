@@ -37,9 +37,6 @@ class ColorSwatchPicker(QWidget):
         self._row.addStretch(1)
         self.set_selected(selected or self._selected)
 
-    def swatch_colors(self) -> list[str]:
-        return list(self._colors)
-
     def selected_color(self) -> str:
         return self._selected
 

@@ -13,12 +13,12 @@ All UI colors live in `design_tokens.py`. Use these tokens only — no hard-code
 | `PANEL` | `#3B3B3B` | Right sidebar background (Lightroom panel gray) |
 | `INPUT` | `#454545` | Text fields, combos, layer list |
 | `BORDER` | `#505050` | Control borders |
-| `DIVIDER` | `#555555` | Unused by current widgets; reserved for future dividers |
+| `DIVIDER` | `#555555` | Section divider lines (`styles.py`), filmstrip thumbnail border |
 | `TEXT` | `#D4D4D4` | Primary labels and values |
 | `TEXT_SECONDARY` | `#A8A8A8` | Control names, section titles, section icons |
 | `TEXT_MUTED` | `#808080` | Hints, version, help |
 | `SLIDER_HANDLE` | `#F0F0F0` | Slider thumb (off-white circle) |
-| `HANDLE` | `#C8C8C8` | Unused by current widgets |
+| `HANDLE` | `#C8C8C8` | Canvas guide lines and unselected anchor handles (`canvas.py`) |
 | `TRACK` | `#606060` | Slider track (unfilled portion) |
 | `SELECTION` | `#565656` | Selected list row |
 | `SELECTION_BORDER` | `#909090` | List-row selection border |
@@ -27,6 +27,12 @@ All UI colors live in `design_tokens.py`. Use these tokens only — no hard-code
 | `ACCENT_HOVER` | `#5C93FF` | Hover state for accent-filled controls |
 | `ACCENT_PRESSED` | `#2E63CC` | Pressed state for accent-filled controls |
 | `ON_ACCENT` | `#FFFFFF` | Text/icon color drawn on top of an accent-filled surface |
+| `CANVAS_DRAWING` | `#FACC15` | In-progress stroke, selected anchor fill, line rubber-band, brush cursor (`canvas.py`) |
+| `CANVAS_SPAN_START` | `#22C55E` | Text-span start marker, stroke-snap indicator (`canvas.py`) |
+| `CANVAS_SPAN_TRACK` | `#86EFAC` | Text-span guide dashed line (`canvas.py`) |
+| `CANVAS_SPAN_END` | `#F59E0B` | Text-span end marker (`canvas.py`) |
+| `CANVAS_ERASER` | `#F87171` | Eraser tool cursor (`canvas.py`) |
+| `CANVAS_ANCHOR_OUTLINE` | `#000000` | Path-tool anchor handle outline (`canvas.py`) |
 
 ## Control layout (Lightroom copy)
 

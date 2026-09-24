@@ -26,13 +26,6 @@ def footer_layout(image_width: int, image_height: int) -> tuple[int, int, int]:
     return padding, font_size, strip_height
 
 
-def footer_height(image_width: int, image_height: int, font_size: int | None = None) -> int:
-    padding, size, strip_height = footer_layout(image_width, image_height)
-    if font_size is not None:
-        return padding * 2 + font_size + 2
-    return strip_height
-
-
 def estimate_footer_height(
     image_width: int,
     image_height: int,

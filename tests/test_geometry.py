@@ -15,11 +15,9 @@ from brush_watermark.geometry.path_text import (
     tangent_half_window,
 )
 from brush_watermark.geometry.points import (
-    chaikin_smooth,
     clamp,
     dist,
     find_anchor_index,
-    find_segment_for_insert,
     normalize_text_direction,
     path_length,
     point_segment_distance,
@@ -87,17 +85,6 @@ class TestSimplifyPoints:
         points = [(0, 0), (1, 1), (50, 50)]
         result = simplify_points(points, min_dist=100.0)
         assert result == [(0, 0), (50, 50)]
-
-
-class TestChaikinSmooth:
-    def test_short_path_unchanged(self):
-        points = [(0, 0), (10, 0)]
-        assert chaikin_smooth(points) == points
-
-    def test_produces_more_points(self):
-        points = [(0, 0), (50, 0), (100, 0)]
-        result = chaikin_smooth(points, iterations=1)
-        assert len(result) > len(points)
 
 
 class TestNormalizeTextDirection:
@@ -207,21 +194,3 @@ class TestFindAnchorIndex:
     def test_exact_hit(self):
         points = [(50, 75)]
         assert find_anchor_index(points, 50, 75, tol=5.0) == 0
-
-
-class TestFindSegmentForInsert:
-    def test_finds_closest_segment(self):
-        points = [(0, 0), (100, 0), (200, 0)]
-        # Point directly on the first segment
-        idx = find_segment_for_insert(points, 50, 0, tol=5.0)
-        assert idx == 0
-
-    def test_finds_second_segment(self):
-        points = [(0, 0), (100, 0), (200, 0)]
-        idx = find_segment_for_insert(points, 150, 0, tol=5.0)
-        assert idx == 1
-
-    def test_returns_minus_one_when_out_of_tolerance(self):
-        points = [(0, 0), (100, 0)]
-        idx = find_segment_for_insert(points, 50, 100, tol=5.0)
-        assert idx == -1

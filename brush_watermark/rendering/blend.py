@@ -1,5 +1,7 @@
 from PIL import Image, ImageChops
 
+from brush_watermark.models import DEFAULT_BLEND_MODE
+
 BLEND_MODE_CHOICES: list[tuple[str, str]] = [
     ("normal", "Normal"),
     ("soft_light", "Soft light"),
@@ -13,7 +15,6 @@ BLEND_MODE_CHOICES: list[tuple[str, str]] = [
 ]
 
 VALID_BLEND_MODES = {mode for mode, _ in BLEND_MODE_CHOICES}
-DEFAULT_BLEND_MODE = "soft_light"
 
 
 def normalize_blend_mode(value: str | None, fallback: str = DEFAULT_BLEND_MODE) -> str:

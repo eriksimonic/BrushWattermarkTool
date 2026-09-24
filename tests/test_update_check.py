@@ -11,7 +11,6 @@ from brush_watermark.services.auto_update import (
     can_auto_update,
     extract_update,
     format_exe_args,
-    format_ps_argument_list,
     install_directory,
 )
 from brush_watermark.services.update_check import (
@@ -148,13 +147,6 @@ class TestAutoUpdateHelpers:
         formatted = format_exe_args([r"C:\photos\my image.jpg"])
         assert "my image.jpg" in formatted
 
-    def test_format_ps_argument_list_quotes_paths(self):
-        formatted = format_ps_argument_list([r"C:\photos\my image.jpg"])
-        assert formatted == r"'C:\photos\my image.jpg'"
-
-    def test_format_ps_argument_list_empty(self):
-        assert format_ps_argument_list([]) == ""
-
     def test_build_updater_script_contains_paths(self, tmp_path: Path):
         source = tmp_path / "source"
         target = tmp_path / "target"
@@ -177,6 +169,32 @@ class TestAutoUpdateHelpers:
         assert str(exe) in text
         assert f'-WorkingDirectory "{target}"' in text
         assert "-ArgumentList 'C:\\photos\\test.jpg'" in text
+
+    def test_build_updater_script_quotes_path_with_spaces_as_one_argument(self, tmp_path: Path):
+        """A path with spaces must survive as a single restart argument.
+
+        PowerShell's `-ArgumentList 'a', 'b'` joins array elements with spaces,
+        so a naive per-element quoting scheme splits `my image.jpg` into two
+        words. The fix builds ONE argument string via list2cmdline (which
+        double-quotes the space-containing path) and wraps that whole string
+        as a single PS string literal.
+        """
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        exe = tmp_path / "BrushWatermark.exe"
+        source.mkdir()
+        target.mkdir()
+        exe.write_text("", encoding="utf-8")
+
+        script = build_updater_script(
+            process_id=5678,
+            source_dir=source,
+            target_dir=target,
+            exe_path=exe,
+            exe_args=[r"C:\photos\my image.jpg"],
+        )
+        text = script.read_text(encoding="utf-8")
+        assert "-ArgumentList '\"C:\\photos\\my image.jpg\"'" in text
 
     def test_build_updater_script_omits_argument_list_when_empty(self, tmp_path: Path):
         source = tmp_path / "source"

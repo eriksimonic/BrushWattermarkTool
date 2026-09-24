@@ -6,7 +6,6 @@ from typing import Optional
 from PIL import ImageFont
 
 FONT_SIZE_RATIO = 0.52
-TEXT_SPAN_FILL = 0.85
 
 
 def font_candidates() -> dict[str, list[str]]:

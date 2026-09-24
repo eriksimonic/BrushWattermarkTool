@@ -99,7 +99,7 @@ chmod +x BrushWatermark/BrushWatermark   # if needed
 ### Menu bar
 
 - **File** — Save & Close, Save Copy & Close, Exit Without Saving
-- **Tools** — Install or remove the Windows Explorer right-click shortcut for JPG/JPEG files; multi-selecting files and choosing it opens them all in one window with a filmstrip to switch between them
+- **Tools** — Install or remove the Windows Explorer right-click shortcut for JPG/JPEG files; multi-selecting files and choosing it opens them all in one window with a filmstrip to switch between them (files that can't be opened are skipped with a warning)
 - **Help** — About (version and usage)
 
 ### Sidebar

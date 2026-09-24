@@ -2,10 +2,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from brush_watermark.config import APP_SLUG
+from brush_watermark.config import APP_SLUG, SUPPORTED_EXTENSIONS
 
 MENU_TEXT = "Watermark Image"
-SUPPORTED_CONTEXT_EXTENSIONS = (".jpg", ".jpeg")
+SUPPORTED_CONTEXT_EXTENSIONS = tuple(sorted(SUPPORTED_EXTENSIONS))
 FILE_PLACEHOLDER = "%1"
 
 
@@ -66,6 +66,9 @@ def uninstall_context_menu() -> None:
         key_path = _context_key(extension)
         try:
             winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path + r"\command")
+        except FileNotFoundError:
+            pass
+        try:
             winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
         except FileNotFoundError:
             pass

@@ -1,6 +1,5 @@
 from brush_watermark.rendering.fonts import (
     FONT_SIZE_RATIO,
-    TEXT_SPAN_FILL,
     find_font_path,
     font_candidates,
     font_size_from_brush,
@@ -14,13 +13,11 @@ from brush_watermark.rendering.watermark import (
     draw_text_on_path,
     fitted_font_size,
     make_preview_image,
-    make_watermark_layer,
     text_dimensions,
 )
 
 __all__ = [
     "FONT_SIZE_RATIO",
-    "TEXT_SPAN_FILL",
     "apply_erase_mask",
     "build_glyph_cache",
     "composite_watermark",
@@ -33,6 +30,5 @@ __all__ = [
     "load_font",
     "make_preview_image",
     "make_stroke_mask",
-    "make_watermark_layer",
     "text_dimensions",
 ]

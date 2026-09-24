@@ -11,7 +11,6 @@ from brush_watermark.geometry.path_text import (
 )
 from brush_watermark.geometry.points import (
     Point,
-    chaikin_smooth,
     clamp,
     dist,
     normalize_text_direction,
@@ -26,7 +25,6 @@ __all__ = [
     "angle_unwrap",
     "averaged_angle",
     "blend_angles",
-    "chaikin_smooth",
     "clamp",
     "dist",
     "glyph_rotation_degrees",

@@ -414,34 +414,27 @@ class SidebarPanel(QWidget):
         for widget in widgets:
             widget.blockSignals(block)
 
-    def load_tool_defaults(self, settings: Settings):
+    def _load_control_values(self, source: Settings | Stroke):
+        """Push brush/opacity/softness/repeat/color/blend from a Settings or Stroke onto the controls."""
         self._block_control_signals(True)
-        self.brush_row.slider.setValue(settings.brush_size)
-        self.opacity_row.slider.setValue(settings.opacity)
-        self.softness_row.slider.setValue(settings.mask_softness)
-        self.repeat_text_check.setChecked(settings.repeat_text)
-        self.repeat_spacing_spin.setValue(settings.repeat_spacing)
-        self.color_picker.set_selected(settings.text_color)
-        blend_index = self.blend_combo.findData(settings.blend_mode)
+        self.brush_row.slider.setValue(source.brush_size)
+        self.opacity_row.slider.setValue(source.opacity)
+        self.softness_row.slider.setValue(source.mask_softness)
+        self.repeat_text_check.setChecked(source.repeat_text)
+        self.repeat_spacing_spin.setValue(source.repeat_spacing)
+        self.color_picker.set_selected(source.text_color)
+        blend_index = self.blend_combo.findData(source.blend_mode)
         if blend_index >= 0:
             self.blend_combo.setCurrentIndex(blend_index)
         self._block_control_signals(False)
         self._update_repeat_spacing_enabled()
+
+    def load_tool_defaults(self, settings: Settings):
+        self._load_control_values(settings)
         self.set_brush_context()
 
     def load_stroke_controls(self, stroke: Stroke):
-        self._block_control_signals(True)
-        self.brush_row.slider.setValue(stroke.brush_size)
-        self.opacity_row.slider.setValue(stroke.opacity)
-        self.softness_row.slider.setValue(stroke.mask_softness)
-        self.repeat_text_check.setChecked(stroke.repeat_text)
-        self.repeat_spacing_spin.setValue(stroke.repeat_spacing)
-        self.color_picker.set_selected(stroke.text_color)
-        blend_index = self.blend_combo.findData(stroke.blend_mode)
-        if blend_index >= 0:
-            self.blend_combo.setCurrentIndex(blend_index)
-        self._block_control_signals(False)
-        self._update_repeat_spacing_enabled()
+        self._load_control_values(stroke)
         self.set_brush_context(layer_name=stroke.name, visible=stroke.visible)
 
     def read_document_settings(self, tool_defaults: Settings) -> Settings:

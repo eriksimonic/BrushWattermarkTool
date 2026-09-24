@@ -117,7 +117,7 @@ class BoxCheckBox(QCheckBox):
     """Checkbox with a hollow outer box; checked adds a padded inner fill."""
 
     INDICATOR_SIZE = 14
-    BORDER = 1
+    BORDER_WIDTH = 1
     GAP = 3
     RADIUS = 2
 
@@ -139,7 +139,7 @@ class BoxCheckBox(QCheckBox):
             if not self.isEnabled():
                 border.setAlpha(128)
 
-            painter.setPen(QPen(border, self.BORDER))
+            painter.setPen(QPen(border, self.BORDER_WIDTH))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(
                 QRectF(ix + 0.5, iy + 0.5, self.INDICATOR_SIZE - 1, self.INDICATOR_SIZE - 1),

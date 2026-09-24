@@ -26,3 +26,12 @@ ACCENT = "#3D7FFF"
 ACCENT_HOVER = "#5C93FF"
 ACCENT_PRESSED = "#2E63CC"
 ON_ACCENT = "#FFFFFF"
+
+# Canvas overlay colors (brush cursor, guides, anchor handles) — distinct from
+# the chrome/interactive tokens above since they're drawn on top of photos.
+CANVAS_DRAWING = "#FACC15"
+CANVAS_SPAN_START = "#22C55E"
+CANVAS_SPAN_TRACK = "#86EFAC"
+CANVAS_SPAN_END = "#F59E0B"
+CANVAS_ERASER = "#F87171"
+CANVAS_ANCHOR_OUTLINE = "#000000"

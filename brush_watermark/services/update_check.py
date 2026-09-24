@@ -1,6 +1,5 @@
 import json
 import re
-import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
@@ -35,7 +34,7 @@ def is_newer_version(latest: str, current: str) -> bool:
     return parse_version(latest) > parse_version(current)
 
 
-def _github_request(url: str, timeout: float) -> urllib.request.Request:
+def _github_request(url: str) -> urllib.request.Request:
     return urllib.request.Request(
         url,
         headers={
@@ -76,7 +75,7 @@ def parse_release_payload(payload: dict) -> tuple[str, str | None]:
 
 def fetch_latest_release(timeout: float = 8.0) -> tuple[str, str | None]:
     with urllib.request.urlopen(
-        _github_request(GITHUB_API_LATEST_RELEASE_URL, timeout),
+        _github_request(GITHUB_API_LATEST_RELEASE_URL),
         timeout=timeout,
     ) as response:
         payload = json.loads(response.read().decode("utf-8"))
@@ -89,10 +88,10 @@ def check_for_update(timeout: float = 8.0) -> UpdateCheckResult:
     current = __version__
     try:
         latest, download_url = fetch_latest_release(timeout)
-    except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
+    except (OSError, ValueError):
         try:
             latest = fetch_remote_version(timeout)
-        except (OSError, urllib.error.URLError, ValueError):
+        except (OSError, ValueError):
             return UpdateCheckResult(
                 current_version=current,
                 latest_version=None,

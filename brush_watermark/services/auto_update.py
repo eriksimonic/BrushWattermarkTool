@@ -8,6 +8,8 @@ import zipfile
 from pathlib import Path
 from typing import Callable
 
+from brush_watermark.config import UPDATE_ASSET_FILENAME
+
 ProgressCallback = Callable[[int, str], None]
 
 
@@ -88,12 +90,6 @@ def format_exe_args(argv: list[str]) -> str:
     return subprocess.list2cmdline(argv)
 
 
-def format_ps_argument_list(argv: list[str]) -> str:
-    if not argv:
-        return ""
-    return ", ".join("'" + arg.replace("'", "''") + "'" for arg in argv)
-
-
 def build_updater_script(
     *,
     process_id: int,
@@ -105,9 +101,9 @@ def build_updater_script(
     script_dir = Path(tempfile.gettempdir()) / "BrushWatermark-update"
     script_dir.mkdir(parents=True, exist_ok=True)
     script_path = script_dir / f"apply-update-{process_id}.ps1"
-    args_text = format_ps_argument_list(exe_args)
+    args_text = format_exe_args(exe_args)
     start_args = (
-        f'-ArgumentList {args_text}'
+        "-ArgumentList '" + args_text.replace("'", "''") + "'"
         if args_text
         else ""
     )
@@ -188,6 +184,3 @@ def prepare_and_launch_update(
     )
     launch_updater(script_path)
     os._exit(0)
-
-
-from brush_watermark.config import UPDATE_ASSET_FILENAME

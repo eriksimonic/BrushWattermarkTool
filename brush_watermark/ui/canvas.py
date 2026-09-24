@@ -7,7 +7,16 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 from brush_watermark.geometry.path_text import point_at_distance, smooth_path_for_text
 from brush_watermark.geometry.points import normalize_text_direction
 from brush_watermark.models import CanvasView, ToolMode
-from brush_watermark.ui.design_tokens import CANVAS_BG, HANDLE
+from brush_watermark.ui.design_tokens import (
+    CANVAS_ANCHOR_OUTLINE,
+    CANVAS_BG,
+    CANVAS_DRAWING,
+    CANVAS_ERASER,
+    CANVAS_SPAN_END,
+    CANVAS_SPAN_START,
+    CANVAS_SPAN_TRACK,
+    HANDLE,
+)
 
 if TYPE_CHECKING:
     pass
@@ -135,16 +144,16 @@ class CanvasWidget(QWidget):
         x, y, _ = point_at_distance(points, end_d)
         sampled.append((int(x), int(y)))
 
-        self._draw_polyline(p, sampled, "#86efac", 2.0, dashed=True)
+        self._draw_polyline(p, sampled, CANVAS_SPAN_TRACK, 2.0, dashed=True)
 
         sx, sy = span_info.start_xy
         ex, ey = span_info.end_xy
         scx, scy = self._image_to_canvas(sx, sy)
         ecx, ecy = self._image_to_canvas(ex, ey)
 
-        p.setPen(QPen(QColor("#22c55e"), 2))
+        p.setPen(QPen(QColor(CANVAS_SPAN_START), 2))
         p.drawEllipse(QPointF(scx, scy), 6, 6)
-        p.setPen(QPen(QColor("#f59e0b"), 3))
+        p.setPen(QPen(QColor(CANVAS_SPAN_END), 3))
         p.drawEllipse(QPointF(ecx, ecy), 8, 8)
 
     def _draw_overlay(self, p: QPainter, view: CanvasView):
@@ -162,11 +171,11 @@ class CanvasWidget(QWidget):
             if view.is_drawing:
                 # Keep the live overlay cheap while dragging a long freehand stroke:
                 # draw the raw polyline and skip the expensive smoothing + text guide.
-                self._draw_polyline(p, view.current_points, "#facc15", width)
+                self._draw_polyline(p, view.current_points, CANVAS_DRAWING, width)
             else:
                 smooth = smooth_path_for_text(view.current_points)
                 smooth = normalize_text_direction(smooth)
-                self._draw_polyline(p, smooth, "#facc15", width)
+                self._draw_polyline(p, smooth, CANVAS_DRAWING, width)
                 span_info = self._text_span_info(smooth, view.current_brush_size)
                 if span_info:
                     self._draw_span_guide(p, span_info)
@@ -181,12 +190,12 @@ class CanvasWidget(QWidget):
             self._draw_polyline(p, stroke.points, HANDLE, 1.0, dashed=True, alpha=160)
 
         anchors = stroke.anchors if stroke.anchors else stroke.points
-        p.setPen(QPen(QColor("#000000"), 1))
+        p.setPen(QPen(QColor(CANVAS_ANCHOR_OUTLINE), 1))
         for i, (px, py) in enumerate(anchors):
             cx, cy = self._image_to_canvas(px, py)
             is_selected = (i == view.selected_anchor_index)
             size = 6.0 if is_selected else 4.0
-            fill = QColor("#facc15") if is_selected else QColor(HANDLE)
+            fill = QColor(CANVAS_DRAWING) if is_selected else QColor(HANDLE)
             p.setBrush(fill)
             p.drawRect(QRectF(cx - size, cy - size, size * 2, size * 2))
 
@@ -196,7 +205,7 @@ class CanvasWidget(QWidget):
             return
         px, py = view.snap_endpoint_xy
         cx, cy = self._image_to_canvas(px, py)
-        p.setPen(QPen(QColor("#22c55e"), 2))
+        p.setPen(QPen(QColor(CANVAS_SPAN_START), 2))
         p.setBrush(Qt.NoBrush)
         p.drawEllipse(QPointF(cx, cy), 10, 10)
         p.drawLine(QPointF(cx - 6, cy), QPointF(cx + 6, cy))
@@ -209,10 +218,10 @@ class CanvasWidget(QWidget):
         lx, ly = view.line_start_xy
         lcx, lcy = self._image_to_canvas(lx, ly)
         px, py = view.last_pointer  # canvas coordinates
-        pen = QPen(QColor("#facc15"), 2, Qt.DashLine)
+        pen = QPen(QColor(CANVAS_DRAWING), 2, Qt.DashLine)
         p.setPen(pen)
         p.drawLine(QPointF(lcx, lcy), QPointF(px, py))
-        p.setPen(QPen(QColor("#facc15"), 2))
+        p.setPen(QPen(QColor(CANVAS_DRAWING), 2))
         p.setBrush(Qt.NoBrush)
         p.drawEllipse(QPointF(lcx, lcy), 5, 5)
 
@@ -224,7 +233,7 @@ class CanvasWidget(QWidget):
         x, y = view.last_pointer
         if not self._inside_image(x, y):
             return
-        color = QColor("#f87171") if view.active_tool == ToolMode.ERASER else QColor("#facc15")
+        color = QColor(CANVAS_ERASER) if view.active_tool == ToolMode.ERASER else QColor(CANVAS_DRAWING)
         radius = max(1.0, int(view.brush_size) * max(view.scale, 0.0001) / 2)
         p.setPen(QPen(color, 2))
         p.setBrush(Qt.NoBrush)

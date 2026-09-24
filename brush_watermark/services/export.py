@@ -5,6 +5,7 @@ from pathlib import Path
 from brush_watermark.services.exif_metadata import (
     DATETIME_EXIF_KEYS,
     SERIAL_EXIF_KEYS,
+    _as_text,
     read_exif_map,
 )
 
@@ -13,7 +14,7 @@ _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def _sanitize_filename_part(value: object, *, max_len: int = 64) -> str:
-    text = str(value).strip()
+    text = _as_text(value)
     if not text:
         return ""
     text = _INVALID_FILENAME_CHARS.sub("_", text)

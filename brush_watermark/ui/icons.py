@@ -7,7 +7,7 @@ vendoring separate colored variants per state.
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
@@ -73,7 +73,3 @@ def get_icon_checkable(name: str, size: int, off_color: str, on_color: str) -> Q
     icon.addPixmap(get_pixmap(name, size, off_color), QIcon.Mode.Normal, QIcon.State.Off)
     icon.addPixmap(get_pixmap(name, size, on_color), QIcon.Mode.Normal, QIcon.State.On)
     return icon
-
-
-def icon_size(size: int) -> QSize:
-    return QSize(size, size)

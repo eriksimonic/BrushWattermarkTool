@@ -186,3 +186,41 @@ class TestDirtyFlag:
         doc.strokes.append(_stroke([(0, 0), (10, 0)]))
         doc.clear_all()
         assert doc.dirty is True
+
+
+class TestLoadDocuments:
+    def _jpg(self, tmp_path: Path, name: str) -> Path:
+        from PIL import Image
+        path = tmp_path / name
+        Image.new("RGB", (10, 10), (128, 128, 128)).save(path)
+        return path
+
+    def test_collects_errors_instead_of_raising(self, tmp_path):
+        from brush_watermark.services.document import load_documents
+        good = self._jpg(tmp_path, "good.jpg")
+        missing = tmp_path / "missing.jpg"
+        corrupt = tmp_path / "corrupt.jpg"
+        corrupt.write_text("not an image")
+
+        docs, errors = load_documents([good, missing, corrupt], Settings())
+
+        assert [doc.image_path for doc in docs] == [good]
+        assert len(errors) == 2
+        assert errors[0].startswith("missing.jpg:")
+        assert errors[1].startswith("corrupt.jpg:")
+
+    def test_each_doc_gets_its_own_settings_copy(self, tmp_path):
+        from brush_watermark.services.document import load_documents
+        settings = Settings()
+        docs, _ = load_documents(
+            [self._jpg(tmp_path, "a.jpg"), self._jpg(tmp_path, "b.jpg")], settings
+        )
+        assert docs[0].settings is not docs[1].settings
+        assert docs[0].settings is not settings
+
+    def test_duplicate_paths_open_once(self, tmp_path):
+        from brush_watermark.services.document import load_documents
+        path = self._jpg(tmp_path, "a.jpg")
+        docs, errors = load_documents([path, tmp_path / "." / "a.jpg"], Settings())
+        assert len(docs) == 1
+        assert errors == []

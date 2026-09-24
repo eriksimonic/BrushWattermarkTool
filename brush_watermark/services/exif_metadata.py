@@ -64,10 +64,7 @@ def _as_text(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, bytes):
-        try:
-            return value.decode("utf-8", errors="ignore").strip("\x00").strip()
-        except UnicodeDecodeError:
-            return ""
+        return value.decode("utf-8", errors="ignore").strip("\x00").strip()
     return str(value).strip()
 
 
@@ -240,8 +237,6 @@ class ImageMetadata:
     @classmethod
     def from_exif(cls, exif: dict[str, object]) -> ImageMetadata:
         iso = _first_value(exif, ("ISOSpeedRatings", "PhotographicSensitivity", "ISO"))
-        if not iso and exif.get("ISOSpeedRatings") not in (None, ""):
-            iso = _as_text(exif.get("ISOSpeedRatings"))
 
         return cls(
             make=_as_text(exif.get("Make")),
@@ -256,35 +251,6 @@ class ImageMetadata:
             copyright=_as_text(exif.get("Copyright")),
             artist=_as_text(exif.get("Artist")),
         )
-
-    @property
-    def camera_line(self) -> str:
-        camera = " ".join(part for part in (self.make, self.model) if part)
-        if self.lens:
-            return f"{camera} · {self.lens}" if camera else self.lens
-        return camera
-
-    @property
-    def settings_line(self) -> str:
-        parts = []
-        if self.iso:
-            parts.append(f"ISO {self.iso}")
-        if self.aperture:
-            parts.append(self.aperture)
-        if self.shutter:
-            parts.append(self.shutter)
-        if self.focal_length:
-            parts.append(self.focal_length)
-        return " · ".join(parts)
-
-    @property
-    def info_line(self) -> str:
-        parts = []
-        if self.serial:
-            parts.append(f"S/N {self.serial}")
-        if self.datetime_original:
-            parts.append(self.datetime_original)
-        return " · ".join(parts)
 
     def _caption_camera(self) -> str:
         camera = _short_camera_name(self.make, self.model)
@@ -341,9 +307,6 @@ class ImageMetadata:
         if sections:
             return " — ".join(sections)
         return "Photograph metadata unavailable"
-
-    def footer_lines(self, additional_copy: str = "") -> list[str]:
-        return [self.caption_line(additional_copy)]
 
 
 def read_image_metadata(image_path: Path) -> ImageMetadata:

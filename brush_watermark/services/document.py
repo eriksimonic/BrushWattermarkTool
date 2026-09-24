@@ -1,3 +1,4 @@
+import dataclasses
 from pathlib import Path
 from typing import Optional
 
@@ -10,7 +11,6 @@ from brush_watermark.geometry.curve import (
 )
 from brush_watermark.geometry.points import (
     Point,
-    chaikin_smooth,
     clamp,
     dist,
     path_length,
@@ -22,7 +22,7 @@ from brush_watermark.rendering.blend import blend_mode_short, composite_watermar
 from brush_watermark.rendering.colors import color_short
 from brush_watermark.rendering.metadata_footer import append_metadata_footer, estimate_footer_height
 from brush_watermark.rendering.watermark import composite_watermark, compute_text_span, make_stroke_watermark_layer
-from brush_watermark.services.exif_metadata import ImageMetadata, read_exif_bytes, read_image_metadata
+from brush_watermark.services.exif_metadata import read_exif_bytes, read_image_metadata
 
 
 class Document:
@@ -247,6 +247,10 @@ class Document:
                 min_d = d
         return min_d
 
+    @staticmethod
+    def _hit_tolerance(brush_size: int, extra_tol: float) -> float:
+        return max(14.0, float(brush_size) * 0.60) + extra_tol
+
     def point_near_stroke(self, index: int, img_x: int, img_y: int, extra_tol: float = 0.0) -> bool:
         if index < 0 or index >= len(self.strokes):
             return False
@@ -256,8 +260,7 @@ class Document:
         min_d = self.stroke_hit_distance(stroke, img_x, img_y)
         if min_d is None:
             return False
-        tol = max(14.0, float(stroke.brush_size) * 0.60) + extra_tol
-        return min_d <= tol
+        return min_d <= self._hit_tolerance(stroke.brush_size, extra_tol)
 
     def find_stroke_at_point(self, img_x: int, img_y: int, extra_tol: float = 24.0) -> int:
         best_idx = -1
@@ -268,7 +271,7 @@ class Document:
             min_d = self.stroke_hit_distance(stroke, img_x, img_y)
             if min_d is None:
                 continue
-            tol = max(14.0, float(stroke.brush_size) * 0.60) + extra_tol
+            tol = self._hit_tolerance(stroke.brush_size, extra_tol)
             if min_d <= tol and (best_dist is None or min_d < best_dist):
                 best_dist = min_d
                 best_idx = idx
@@ -432,8 +435,6 @@ class Document:
     def canvas_to_image_xy(
         self, canvas_x: float, canvas_y: float, scale: float, offset_x: float, offset_y: float
     ) -> Point:
-        from brush_watermark.geometry.points import clamp
-
         x = (canvas_x - offset_x) / scale
         y = (canvas_y - offset_y) / scale
         return int(clamp(x, 0, self.full_w - 1)), int(clamp(y, 0, self.full_h - 1))
@@ -456,3 +457,29 @@ class Document:
             offset_x <= canvas_x <= offset_x + display_w
             and offset_y <= canvas_y <= offset_y + display_h
         )
+
+
+def load_documents(paths: list[Path], settings: Settings) -> tuple[list[Document], list[str]]:
+    """Open each image as its own Document, collecting per-file errors instead of raising.
+
+    Each Document gets its own Settings copy so switching between images
+    doesn't leak in-progress edits from one to another. Duplicate paths
+    are opened once.
+    """
+    docs: list[Document] = []
+    errors: list[str] = []
+    seen: set[Path] = set()
+    for path in paths:
+        key = Path(path).resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            docs.append(Document(path, dataclasses.replace(settings)))
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            errors.append(f"{Path(path).name}: {exc}")
+    return docs, errors
+
+
+def format_load_errors(errors: list[str]) -> str:
+    return "Could not open:\n\n" + "\n".join(errors)
